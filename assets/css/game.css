@@ -1,0 +1,184 @@
+/* =====================================================================
+   game.css — розкладка ігрових сторінок
+   Екран локації (pages/game.html), три колонки:
+     ЛІВА   — персонаж: зображення, HP / MP / EXP + LVL, швидкий доступ
+     ЦЕНТР  — локація: бій або панель мирної локації (Домівка, Храм, Шинок)
+     ПРАВА  — ворог (лише в бойових локаціях)
+   ===================================================================== */
+
+.battle {
+  display: grid;
+  grid-template-columns: 300px 1fr 300px;
+  gap: 20px;
+  align-items: start;
+}
+/* Мирна локація — колонки ворога немає */
+.battle.no-enemy { grid-template-columns: 300px 1fr; }
+
+.col { display: flex; flex-direction: column; gap: 12px; }
+
+/* Пропорція 2:3, як у картинок героя і ворогів (600×900) */
+.portrait { width: 100%; aspect-ratio: 2 / 3; }
+
+.stats { display: flex; flex-direction: column; gap: 8px; }
+.exp-row { display: grid; grid-template-columns: 1fr 90px; gap: 8px; }
+.exp-row .bar-lvl { display: flex; align-items: center; justify-content: center; font-weight: 700; }
+
+/* Центральна колонка */
+.location  { min-height: 56px; }
+.arena {
+  min-height: 160px;
+  gap: 8px;
+}
+.arena-title { font-size: 1.4rem; font-weight: 700; }
+.arena-line  { opacity: .9; }
+.arena .wf-link { margin-top: 8px; }
+
+/* Журнал бою */
+.log {
+  margin: 0;
+  padding: 10px 10px 10px 34px;
+  height: 260px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 2px solid rgba(255, 255, 255, .25);
+  border-radius: 6px;
+  font-size: .92rem;
+}
+.log li { padding: 2px 0; }
+.log .log-hero  { color: #9fd8ff; }
+.log .log-enemy { color: #ffb4a8; }
+.log .log-info  { color: #ffe08a; font-weight: 600; }
+.log .log-crit  { font-weight: 700; }
+.queue     { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; }
+.queue .wf { aspect-ratio: 1; min-height: 0; padding: 2px; font-size: .75rem; }
+.queue-head, .inv-head {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: .9rem;
+}
+.inv-head h2 { margin: 0; }
+.actions .wf { min-height: 56px; font-size: 1.1rem; }
+.loc-desc { font-size: .85rem; opacity: .85; }
+
+/* Мирні локації */
+.place p { margin: 0; }
+.place h3 { margin: 0 0 4px; font-size: 1rem; }
+.shop { align-items: flex-start; }
+.shop > * { flex: 1 1 260px; }
+.shop-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, .06);
+  border-radius: 4px;
+}
+.shop-row small { opacity: .75; }
+.shop-row .wf { min-height: 32px; padding: 4px 10px; flex: 0 0 auto; font-size: .85rem; }
+
+/* Мапа: компактні поля локацій (удвічі менші, ніж раніше) */
+.loc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 160px));
+  gap: 8px;
+}
+.loc-card {
+  min-height: 50px;
+  padding: 6px 8px;
+  font-size: .85rem;
+  gap: 2px;
+}
+.loc-card .loc-desc { font-size: .72rem; }
+.wf-locked.loc-card { cursor: pointer; }
+
+/* Характеристики та спорядження */
+.stat-list { display: flex; flex-direction: column; gap: 6px; }
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, .06);
+  border-radius: 4px;
+}
+.stat-row strong { margin-left: auto; }
+.attr-plus { min-height: 28px; width: 28px; padding: 0; font-weight: 700; }
+.equip-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.equip-cell { min-height: 70px; font-size: .85rem; }
+.equip-slot-name { font-size: .75rem; opacity: .8; }
+.item-desc { min-height: 120px; align-items: flex-start; text-align: left; }
+.item-diff { color: #ffe08a; }
+.inv-actions > * { flex: 1 1 130px; }
+
+/* Під час бою */
+.is-fighting .slots .wf { pointer-events: none; }
+
+@media (max-width: 1000px) {
+  .battle, .battle.no-enemy { grid-template-columns: 1fr; }
+  .portrait { max-width: 300px; margin: 0 auto; }
+  .equip-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Шинок: іконка, назва, ціна в один рядок */
+.shop-row .shop-name { flex: 1; }
+
+/* =====================================================================
+   ТЕЛЕФОНИ (game_00006)
+   Герой і ворог — поруч угорі, бій і журнал — під ними на всю ширину
+   ===================================================================== */
+@media (hover: none) {
+  .attr-plus { min-height: 40px; width: 40px; }
+  .shop-row .wf { min-height: 40px; }
+}
+
+@media (max-width: 700px) {
+  .battle {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "hero   enemy"
+      "center center";
+    gap: 12px;
+  }
+  .battle.no-enemy {
+    grid-template-columns: 1fr;
+    grid-template-areas: "hero" "center";
+  }
+  .battle > .col:nth-child(1) { grid-area: hero; }
+  .battle > .col:nth-child(2) { grid-area: center; }
+  .battle > #enemy-col        { grid-area: enemy; }
+
+  .portrait { max-width: none; }
+  .battle.no-enemy .portrait { max-width: 200px; }
+  .battle.no-enemy #quick-slots { grid-template-columns: repeat(6, 1fr); }
+  .col { gap: 8px; }
+
+  .bar { min-height: 26px; }
+  .bar-label { font-size: .8rem; padding: 3px 4px; }
+  .exp-row { grid-template-columns: 1fr 64px; gap: 6px; }
+  .exp-row .bar-lvl { font-size: .8rem; }
+  .inv-head, .queue-head { font-size: .8rem; }
+
+  .arena { min-height: 120px; }
+  .arena-title { font-size: 1.15rem; }
+  .log { height: 200px; font-size: .85rem; padding-left: 28px; }
+
+  /* Черга дій: 2 ряди по 5 замість 10 в ряд */
+  .queue { grid-template-columns: repeat(5, 1fr); }
+  .queue .wf { font-size: .8rem; }
+  .actions .wf { min-height: 52px; font-size: 1rem; }
+
+  .loc-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+  .loc-card { min-height: 56px; }
+  .equip-cell { min-height: 64px; }
+  .stat-row { padding: 4px 8px; }
+
+  /* Інвентар: спорядження 2×4 замість 8 рядків */
+  #equip-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  /* Сторінка персонажа: портрет не на весь екран */
+  body[data-page="character"] .pic { max-width: 220px; margin: 0 auto; }
+}
