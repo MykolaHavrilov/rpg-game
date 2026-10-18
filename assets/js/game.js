@@ -52,7 +52,7 @@
   }
 
   function fmtStat(key, value) {
-    const pct = ["crit", "blockPhys", "blockMag"].includes(key);
+    const pct = ["crit", "dodge", "blockPhys", "blockMag"].includes(key);
     return fmtNum(value) + (pct ? "%" : "");
   }
 
@@ -106,22 +106,39 @@
   }
 
   function itemLabel(entry) {
-    const item = RPG.ITEMS[entry.id];
-    return item.name + (entry.qty > 1 ? ` ×${entry.qty}` : "");
+    return RPG.itemFullName(entry) + (entry.qty > 1 ? ` ×${entry.qty}` : "");
+  }
+
+  // Назва речі кольором рідкості
+  function rarityName(ref, tag = "strong") {
+    const node = el(tag, null, RPG.itemFullName(ref));
+    if (RPG.hasRarity(RPG.refId(ref))) node.classList.add("rt-" + RPG.rarityOf(ref));
+    return node;
+  }
+
+  // Картинка з рідкістю; якщо копії немає — звичайна картинка
+  function setItemImg(img, ref, onFail) {
+    const id = RPG.refId(ref);
+    img.src = RPG.itemImgRef(ref);
+    img.addEventListener("error", function fallback() {
+      const plain = RPG.itemImg(id);
+      if (!img.src.endsWith(plain.split("/").pop())) { img.src = plain; return; }
+      img.removeEventListener("error", fallback);
+      onFail();
+    });
   }
 
   // Наповнює клітинку предмета: картинка + кількість.
   // Якщо картинки в assets/img/items/ немає — показує назву текстом,
   // тож нову іконку достатньо просто покласти в папку.
-  function fillItemCell(cell, id, qty = 1) {
-    const item = RPG.ITEMS[id];
+  function fillItemCell(cell, ref, qty = 1) {
+    const item = RPG.ITEMS[RPG.refId(ref)];
     cell.textContent = "";
-    cell.title = item.name + (qty > 1 ? ` ×${qty}` : "");
+    cell.title = RPG.itemFullName(ref) + (qty > 1 ? ` ×${qty}` : "");
     cell.classList.add("has-icon");
     const img = el("img", "item-icon");
     img.alt = item.name;
-    img.src = RPG.itemImg(id);
-    img.addEventListener("error", () => {
+    setItemImg(img, ref, () => {
       img.remove();
       cell.classList.remove("has-icon");
       cell.prepend(el("span", "item-name", item.name));
@@ -132,17 +149,18 @@
   }
 
   // Маленька іконка поруч із текстом (спорядження, шинок, опис)
-  function smallIcon(id, className = "mini-icon") {
+  function smallIcon(ref, className = "mini-icon") {
     const img = el("img", className);
     img.alt = "";
-    img.src = RPG.itemImg(id);
-    img.addEventListener("error", () => img.remove());
+    setItemImg(img, ref, () => img.remove());
     return img;
   }
 
-  function slotClass(id, extra = "") {
-    const rare = RPG.ITEMS[id]?.rarity === "rare" ? " rarity-rare" : "";
-    return "wf wf-slot" + rare + (extra ? " " + extra : "");
+  function slotClass(ref, extra = "") {
+    const id = RPG.refId(ref);
+    let cls = RPG.ITEMS[id]?.rarity === "rare" ? " rarity-rare" : "";
+    if (RPG.hasRarity(id)) cls += " rarity-" + RPG.rarityOf(ref);
+    return "wf wf-slot" + cls + (extra ? " " + extra : "");
   }
 
   // Оновлює блок героя: картинка, ім'я, HP / MP / EXP / LVL, відновлення
@@ -174,9 +192,9 @@
     }
   }
 
-  function describeStats(item) {
-    if (!item.stats) return "";
-    return Object.entries(item.stats)
+  // ref — ID предмета або екземпляр з рідкістю
+  function describeStats(ref) {
+    return Object.entries(RPG.itemStats(ref))
       .map(([k, v]) => `${RPG.STAT_NAMES[k] || k} ${v > 0 ? "+" : ""}${v}`)
       .join(", ");
   }
@@ -303,7 +321,10 @@
       volume.value = settings.volume;
       volumeValue.textContent = settings.volume + "%";
       volume.addEventListener("input", () => { volumeValue.textContent = volume.value + "%"; });
-      volume.addEventListener("change", () => RPG.setSettings({ volume: Number(volume.value) }));
+      volume.addEventListener("change", () => {
+        RPG.setSettings({ volume: Number(volume.value) });
+        showMsg(msg, "Налаштування збережено.");
+      });
     }
 
     const exportBtn = $("export-btn");
@@ -326,6 +347,8 @@
         const save = await RPG.importSave(file);
         RPG.setCurrentSlot(save.id);
         exportBtn.disabled = false;
+        // Гра завантажена — «Назад» поведе на сторінку персонажа (menu.js)
+        document.body.dataset.gameLoaded = "1";
         showMsg(msg, `Імпортовано й обрано поточною грою: ${save.character.name}, рівень ${save.character.level}.`);
       } catch (e) {
         showMsg(msg, e.message, true);
@@ -344,9 +367,15 @@
 
     // Перехід з мапи: game.html?loc=village_start
     const locParam = new URLSearchParams(location.search).get("loc");
-    if (locParam && RPG.LOCATIONS[locParam] && !RPG.LOCATIONS[locParam].locked && save.location.map !== locParam) {
-      save.location.map = locParam;
-      await RPG.saveGame(save);
+    let enterError = null;
+    if (locParam && RPG.LOCATIONS[locParam] && save.location.map !== locParam) {
+      const can = RPG.canEnterLocation(locParam, save.character.level);
+      if (can.ok) {
+        save.location.map = locParam;
+        await RPG.saveGame(save);
+      } else {
+        enterError = can.reason;
+      }
     }
     const locId = save.location.map;
     const locData = RPG.getLocation(locId);
@@ -360,6 +389,7 @@
     document.querySelector(".battle").classList.toggle("no-enemy", !combat);
 
     let fighting = false;
+    if (enterError) setTimeout(() => showMsg(msg, enterError + " Ви залишились тут.", true), 0);
 
     function renderQuickSlots() {
       const box = $("quick-slots");
@@ -368,7 +398,7 @@
         const entry = save.inventory[i];
         if (!entry) { box.append(el("div", "wf wf-slot slot-empty", "")); continue; }
         const item = RPG.ITEMS[entry.id];
-        const cell = fillItemCell(button("", slotClass(entry.id)), entry.id, entry.qty);
+        const cell = fillItemCell(button("", slotClass(entry)), entry, entry.qty);
         cell.title = itemLabel(entry) + " — " + item.description +
           (item.type === "consumable" ? " (натисніть, щоб використати)" : "");
         if (item.type === "consumable") {
@@ -451,7 +481,7 @@
         const r = el("div", "shop-row");
         r.append(smallIcon(id));
         const info = el("span", "shop-name", item.name);
-        info.title = [item.description, describeStats(item), describeEffect(item)].filter(Boolean).join(" · ");
+        info.title = [item.description, describeStats(id), describeEffect(item)].filter(Boolean).join(" · ");
         if (item.levelReq > 1) info.append(el("small", null, ` · рів. ${item.levelReq}`));
         const b = button(`${price} зол.`, "wf wf-button", async () => {
           const res = RPG.buyItem(save, id);
@@ -469,16 +499,51 @@
       sellBox.append(el("h3", null, "Продати (з інвентаря)"));
       if (!save.inventory.length) sellBox.append(el("p", "note", "Інвентар порожній. Вдягнені речі спершу зніміть."));
       save.inventory.forEach((entry, index) => {
+        const item = RPG.ITEMS[entry.id];
+        const unit = RPG.refSellPrice(entry);
         const r = el("div", "shop-row");
-        r.append(smallIcon(entry.id), el("span", "shop-name", itemLabel(entry)));
-        r.append(button(`+${RPG.shopBuyPrice(entry.id)} зол.`, "wf wf-secondary", async () => {
-          const item = RPG.ITEMS[entry.id];
-          const res = RPG.sellItem(save, index);
+        const name = el("span", "shop-name", itemLabel(entry));
+        if (RPG.hasRarity(entry.id)) {
+          name.classList.add("rt-" + RPG.rarityOf(entry));
+          name.title = describeStats(entry);
+        }
+        name.append(el("small", null, ` · ${unit} зол./шт.`));
+        r.append(smallIcon(entry), name);
+
+        async function sell(qty) {
+          const res = RPG.sellItem(save, index, qty);
           if (!res.ok) { showMsg(msg, res.reason, true); return; }
           await RPG.saveGame(save);
-          showMsg(msg, `Продано: ${item.name} за ${res.price} золота.`);
+          showMsg(msg, `Продано: ${RPG.itemFullName(entry)}${res.qty > 1 ? ` × ${res.qty}` : ""} за ${fmtNum(res.price)} золота.`);
           renderAll();
-        }));
+        }
+
+        if (entry.qty > 1) {
+          // Своя кількість: поле + «Продати», і окремо — уся стопка
+          const qtyInput = el("input", "shop-qty");
+          Object.assign(qtyInput, { type: "number", min: 1, max: entry.qty, step: 1, value: 1, inputMode: "numeric" });
+          qtyInput.title = `Скільки продати (1–${entry.qty})`;
+          qtyInput.setAttribute("aria-label", `Кількість: ${item.name}`);
+          const sellSome = button(`+${unit} зол.`, "wf wf-secondary", () => {
+            const n = Math.floor(Number(qtyInput.value));
+            if (!(n >= 1 && n <= entry.qty)) {
+              showMsg(msg, `Вкажіть кількість від 1 до ${entry.qty}.`, true);
+              return;
+            }
+            sell(n);
+          });
+          const updateLabel = () => {
+            const n = Math.min(entry.qty, Math.max(1, Math.floor(Number(qtyInput.value)) || 1));
+            sellSome.textContent = `Продати +${fmtNum(unit * n)} зол.`;
+          };
+          qtyInput.addEventListener("input", updateLabel);
+          qtyInput.addEventListener("keydown", e => { if (e.key === "Enter") sellSome.click(); });
+          updateLabel();
+          const sellAll = button(`Усе (${entry.qty}) +${fmtNum(unit * entry.qty)} зол.`, "wf wf-secondary", () => sell(entry.qty));
+          r.append(qtyInput, sellSome, sellAll);
+        } else {
+          r.append(button(`+${unit} зол.`, "wf wf-secondary", () => sell(1)));
+        }
         sellBox.append(r);
       });
 
@@ -511,8 +576,10 @@
     function renderQueue() {
       const box = $("queue");
       box.innerHTML = "";
-      const weaponItem = RPG.ITEMS[save.equipment.mainHand];
-      const magicWeapon = weaponItem && (weaponItem.stats?.magic || 0) > (weaponItem.stats?.attack || 0);
+      const weaponRef = save.equipment.mainHand;
+      const weaponItem = RPG.ITEMS[RPG.refId(weaponRef)];
+      const weaponSt = weaponItem ? RPG.itemStats(weaponRef) : {};
+      const magicWeapon = weaponItem && (weaponSt.magic || 0) > (weaponSt.attack || 0);
       for (let i = 0; i < 10; i++) {
         const action = save.battleQueue[i];
         let label = "—";
@@ -521,7 +588,7 @@
         box.append(el("div", action ? "wf wf-slot" : "wf wf-slot slot-empty", `${i + 1}. ${label}`));
       }
       $("weapon-info").textContent = weaponItem
-        ? `Зброя: ${weaponItem.name}${magicWeapon ? " (магічна — витрачає MP)" : ""}`
+        ? `Зброя: ${RPG.itemFullName(weaponRef)}${magicWeapon ? " (магічна — витрачає MP)" : ""}`
         : "Зброя: немає (бій кулаками)";
     }
 
@@ -589,7 +656,10 @@
         save.character.kills = (save.character.kills || 0) + 1;
         summary.push(`+${enemy.exp} EXP`);
         if (loot.gold) summary.push(`+${loot.gold} золота`);
-        for (const it of loot.items) summary.push(`${RPG.ITEMS[it.id].name} ×${it.qty}`);
+        for (const it of loot.items) {
+          if (it.refs) it.refs.forEach(ref => summary.push(RPG.itemFullName(ref)));
+          else summary.push(`${RPG.ITEMS[it.id].name} ×${it.qty}`);
+        }
       } else if (!result.draw) {
         death = RPG.applyDeath(save, result.enemyIds);
       }
@@ -615,7 +685,7 @@
           `Штраф досвіду: −${fmtNum(death.expLost)} EXP` +
             (death.expLost < death.penalty ? ` (з ${fmtNum(death.penalty)}; рівень не знижується)` : ""),
           death.lostItems.length
-            ? "Втрачено в бою: " + death.lostItems.map(id => RPG.ITEMS[id].name).join(", ")
+            ? "Втрачено в бою: " + death.lostItems.map(ref => RPG.itemFullName(ref)).join(", ")
             : "Усі вдягнені речі вціліли.",
           `Ви відродилися в Храмі з ${Math.round(RPG.RESPAWN_HP_PCT * 100)}% здоров'я і без мани.`
         ];
@@ -634,7 +704,9 @@
       if (result.win) {
         const lines = [summary.join(" · ")];
         if (levelUps.length) {
+          const auto = RPG.describeAttrs(RPG.getClass(save.character.classId).levelAttrs, levelUps.length);
           lines.push(`Новий рівень: ${levelUps[levelUps.length - 1]}! Здоров'я та мана відновлені. ` +
+            (auto ? `Бонус рівня: ${auto}. ` : "") +
             `Вільних очок атрибутів: ${save.character.freePoints} (сторінка «Персонаж»).`);
         }
         lines.push(`Переможено ворогів: ${save.character.kills}`);
@@ -695,7 +767,7 @@
     if (!save) return;
 
     const DERIVED = ["hp", "mp", "attack", "magic", "defense", "magicDefense", "speed",
-                     "crit", "blockPhys", "blockMag", "hpRegen", "mpRegen"];
+                     "crit", "dodge", "blockPhys", "blockMag", "hpRegen", "mpRegen"];
 
     function render() {
       renderHeroBars(save);
@@ -706,13 +778,21 @@
       const attrBox = $("attrs-list");
       attrBox.innerHTML = "";
       const total = RPG.totalAttrs(save);
+      const byLevel = RPG.levelAttrs(save);
+      const cls = RPG.getClass(ch.classId);
       attrBox.append(el("p", "note", ch.freePoints
         ? `Вільних очок: ${ch.freePoints}. Натисніть «+», щоб вкласти.`
         : `Вільних очок немає. За кожен новий рівень — ${RPG.POINTS_PER_LEVEL}.`));
+      const autoTxt = RPG.describeAttrs(cls.levelAttrs);
+      if (autoTxt) attrBox.append(el("p", "note", `${cls.name}: за кожен рівень автоматично ${autoTxt}.`));
       for (const key in RPG.ATTRS) {
         const row = el("div", "stat-row");
-        const fromItems = total[key] - (ch.attrs[key] || 0);
-        const value = el("strong", null, String(total[key]) + (fromItems ? ` (+${fromItems} з речей)` : ""));
+        const fromLevels = byLevel[key] || 0;
+        const fromItems = total[key] - (ch.attrs[key] || 0) - fromLevels;
+        const extra = [];
+        if (fromLevels) extra.push(`+${fromLevels} за рівні`);
+        if (fromItems) extra.push(`+${fromItems} з речей`);
+        const value = el("strong", null, String(total[key]) + (extra.length ? ` (${extra.join(", ")})` : ""));
         row.append(el("span", null, RPG.ATTRS[key]), value);
         if (ch.freePoints > 0) {
           const plus = button("+", "wf wf-button attr-plus", async () => {
@@ -757,12 +837,13 @@
       const slots = $("equip-slots");
       slots.innerHTML = "";
       for (const slot in RPG.SLOTS) {
-        const item = RPG.ITEMS[save.equipment[slot]];
-        const cell = el("div", item ? "wf wf-slot equip-cell" : "wf wf-slot equip-cell slot-empty");
-        if (item) cell.append(smallIcon(save.equipment[slot], "equip-icon"));
+        const ref = save.equipment[slot];
+        const item = RPG.ITEMS[RPG.refId(ref)];
+        const cell = el("div", item ? slotClass(ref, "equip-cell") : "wf wf-slot equip-cell slot-empty");
+        if (item) cell.append(smallIcon(ref, "equip-icon"));
         cell.append(el("span", "equip-slot-name", RPG.SLOTS[slot]));
-        cell.append(el("strong", null, item ? item.name : "порожньо"));
-        if (item) cell.title = describeStats(item);
+        cell.append(item ? rarityName(ref) : el("strong", null, "порожньо"));
+        if (item) cell.title = describeStats(ref);
         slots.append(cell);
       }
     }
@@ -797,7 +878,7 @@
       for (let i = 0; i < total; i++) {
         const entry = list[i];
         if (!entry) { box.append(el("div", "wf wf-slot slot-empty", "")); continue; }
-        const cell = fillItemCell(button("", slotClass(entry.id)), entry.id, entry.qty);
+        const cell = fillItemCell(button("", slotClass(entry)), entry, entry.qty);
         if (selected?.kind === kind && selected.index === i) cell.classList.add("is-selected");
         cell.addEventListener("click", () => { selected = { kind, index: i }; render(); });
         box.append(cell);
@@ -808,11 +889,12 @@
       const eq = $("equip-list");
       eq.innerHTML = "";
       for (const slot in RPG.SLOTS) {
-        const item = RPG.ITEMS[save.equipment[slot]];
-        const cell = button("", "wf wf-slot equip-cell" + (item ? "" : " slot-empty"));
-        if (item) cell.append(smallIcon(save.equipment[slot], "equip-icon"));
+        const ref = save.equipment[slot];
+        const item = RPG.ITEMS[RPG.refId(ref)];
+        const cell = button("", item ? slotClass(ref, "equip-cell") : "wf wf-slot equip-cell slot-empty");
+        if (item) cell.append(smallIcon(ref, "equip-icon"));
         cell.append(el("span", "equip-slot-name", RPG.SLOTS[slot]));
-        cell.append(el("strong", null, item ? item.name : "порожньо"));
+        cell.append(item ? rarityName(ref) : el("strong", null, "порожньо"));
         if (selected?.kind === "eq" && selected.slot === slot) cell.classList.add("is-selected");
         cell.addEventListener("click", () => { selected = item ? { kind: "eq", slot } : null; render(); });
         eq.append(cell);
@@ -828,11 +910,16 @@
       renderDesc();
     }
 
-    function selectedItemId() {
+    // Обраний запис: екземпляр речі (з рідкістю) або стопка
+    function selectedRef() {
       if (!selected) return null;
       if (selected.kind === "eq") return save.equipment[selected.slot] || null;
-      if (selected.kind === "chest") return save.chest[selected.index]?.id || null;
-      return save.inventory[selected.index]?.id || null;
+      if (selected.kind === "chest") return save.chest[selected.index] || null;
+      return save.inventory[selected.index] || null;
+    }
+
+    function selectedItemId() {
+      return RPG.refId(selectedRef()) || null;
     }
 
     function renderDesc() {
@@ -844,21 +931,23 @@
         desc.append(el("div", null, "Оберіть предмет, щоб побачити опис."));
         return;
       }
+      const ref = selectedRef();
       const item = RPG.ITEMS[id];
-      desc.append(smallIcon(id, "desc-icon"));
-      desc.append(el("strong", null, item.name + (item.rarity === "rare" ? " · рідкісне" : "")));
+      desc.append(smallIcon(ref, "desc-icon"));
+      if (RPG.hasRarity(id)) desc.append(rarityName(ref));
+      else desc.append(el("strong", null, item.name + (item.rarity === "rare" ? " · рідкісне" : "")));
       desc.append(el("div", null, item.description));
-      const st = describeStats(item);
+      const st = describeStats(ref);
       if (st) desc.append(el("div", null, "Характеристики: " + st));
       if (item.slot) desc.append(el("div", null, `Слот: ${RPG.SLOTS[item.slot]} · потрібен рівень ${item.levelReq || 1}`));
       const eff = describeEffect(item);
       if (eff) desc.append(el("div", null, eff));
       desc.append(el("div", null,
-        `Вартість: ${item.price || 0} золота · шинкар купить за ${RPG.shopBuyPrice(id)}` +
+        `Вартість: ${item.price || 0} золота · шинкар купить за ${RPG.refSellPrice(ref)}` +
         (item.noShop ? " · у продажу не буває" : "")));
 
       if (selected.kind === "inv" && item.slot) {
-        const diff = RPG.previewEquip(save, id);
+        const diff = RPG.previewEquip(save, selected.index);
         const txt = Object.entries(diff).map(([k, v]) => `${RPG.STAT_NAMES[k] || k} ${v > 0 ? "+" : ""}${v}`).join(", ");
         desc.append(el("div", "item-diff", "Якщо вдягнути: " + (txt || "без змін")));
         const check = RPG.canEquip(save, id);
@@ -879,19 +968,19 @@
     }
 
     btnEquip.addEventListener("click", async () => {
-      const id = selectedItemId();
-      const old = RPG.ITEMS[save.equipment[RPG.ITEMS[id].slot]];
-      if (old && !confirm(`Замінити «${old.name}» на «${RPG.ITEMS[id].name}»?`)) return;
-      const r = RPG.equipItem(save, id);
-      selected = r.ok ? { kind: "eq", slot: RPG.ITEMS[id].slot } : selected;
-      await commit(r.ok ? `Вдягнено: ${RPG.ITEMS[id].name}` : r.reason, !r.ok);
+      const ref = selectedRef();
+      const slot = RPG.ITEMS[ref.id].slot;
+      const old = save.equipment[slot];
+      if (old && !confirm(`Замінити «${RPG.itemFullName(old)}» на «${RPG.itemFullName(ref)}»?`)) return;
+      const r = RPG.equipItem(save, selected.index);
+      selected = r.ok ? { kind: "eq", slot } : selected;
+      await commit(r.ok ? `Вдягнено: ${RPG.itemFullName(ref)}` : r.reason, !r.ok);
     });
 
     btnUnequip.addEventListener("click", async () => {
-      const id = selectedItemId();
       const r = RPG.unequipItem(save, selected.slot);
       selected = null;
-      await commit(r.ok ? `Знято: ${RPG.ITEMS[id].name}` : r.reason, !r.ok);
+      await commit(r.ok ? `Знято: ${RPG.itemFullName(r.ref)}` : r.reason, !r.ok);
     });
 
     btnUse.addEventListener("click", async () => {
@@ -904,7 +993,7 @@
     btnDrop.addEventListener("click", async () => {
       const entry = save.inventory[selected.index];
       const item = RPG.ITEMS[entry.id];
-      if (!confirm(`Викинути «${item.name}»${entry.qty > 1 ? ` ×${entry.qty}` : ""}?`)) return;
+      if (!confirm(`Викинути «${RPG.itemFullName(entry)}»${entry.qty > 1 ? ` ×${entry.qty}` : ""}?`)) return;
       save.inventory.splice(selected.index, 1);
       selected = null;
       await commit(`Викинуто: ${item.name}`);
@@ -945,11 +1034,16 @@
         const loc = RPG.LOCATIONS[id];
         if (!loc) continue;
         const here = save.location.map === id;
-        const cell = button("", "wf loc-card " + (loc.locked ? "wf-locked" : "wf-link"));
+        const closed = !here && !RPG.canEnterLocation(id, save.character.level).ok;
+        const cell = button("", "wf loc-card " + (closed ? "wf-locked" : "wf-link"));
         cell.append(el("strong", null, loc.name));
-        cell.append(el("span", "loc-desc", loc.locked ? "Закрито" : here ? "Ви тут" : TYPE_LABEL[loc.type]));
+        const label = loc.locked ? "Закрито"
+          : here ? "Ви тут"
+          : closed ? `З ${loc.minLevel} рівня`
+          : TYPE_LABEL[loc.type] + (loc.minLevel ? ` · від ${loc.minLevel} рів.` : "");
+        cell.append(el("span", "loc-desc", label));
         if (selected === id) cell.classList.add("is-selected");
-        if (loc.locked) cell.setAttribute("aria-disabled", "true");
+        if (closed) cell.setAttribute("aria-disabled", "true");
         cell.addEventListener("click", () => { selected = id; render(); });
         grid.append(cell);
       }
@@ -973,8 +1067,13 @@
       }
       if (save.location.map === selected) {
         details.append(link("Ви тут — відкрити локацію", "game.html"));
-      } else {
+        return;
+      }
+      const can = RPG.canEnterLocation(selected, save.character.level);
+      if (can.ok) {
         details.append(link("Перейти сюди", "game.html?loc=" + encodeURIComponent(selected)));
+      } else {
+        details.append(el("p", "note", `Доступ з ${loc.minLevel} рівня персонажа (зараз у вас ${save.character.level}).`));
       }
     }
 

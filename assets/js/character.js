@@ -53,6 +53,7 @@ function createNewSave(name, classId = DEFAULT_CLASS) {
     },
     equipment: {},
     inventory: [],
+    lootLuck: RPG.newLuck(),   // прихований лічильник рідкісних речей (rarity.js)
     chest: [],              // сундук у Домівці — речі не зникають при смерті
     battleQueue: ["attack"],   // черга дій у бою (до 10)
     location: { map: cls.startLocation, page: "game" },
@@ -62,7 +63,7 @@ function createNewSave(name, classId = DEFAULT_CLASS) {
   for (const it of cls.startItems) {
     const item = ITEMS[it.id];
     if (!item) continue;
-    if (it.equip && item.slot) save.equipment[item.slot] = it.id;
+    if (it.equip && item.slot) save.equipment[item.slot] = RPG.makeItem(it.id, "common", { fromShop: true });
     else addItem(save, it.id, it.qty || 1);
   }
 
@@ -75,8 +76,8 @@ function createNewSave(name, classId = DEFAULT_CLASS) {
 // база професії + приріст за рівні + атрибути + екіпірування
 
 const STAT_KEYS = ["hp", "mp", "attack", "magic", "defense", "magicDefense", "speed",
-                   "crit", "blockPhys", "blockMag", "hpRegen", "mpRegen"];
-const DECIMAL_KEYS = ["crit", "blockPhys", "blockMag", "hpRegen", "mpRegen"];
+                   "crit", "dodge", "blockPhys", "blockMag", "hpRegen", "mpRegen"];
+const DECIMAL_KEYS = ["crit", "dodge", "blockPhys", "blockMag", "hpRegen", "mpRegen"];
 
 function calcStats(save) {
   const cls = getClass(save.character.classId);
@@ -91,17 +92,28 @@ function calcStats(save) {
   // Атрибути (власні + з речей)
   addStats(stats, RPG.attrBonuses(RPG.totalAttrs(save)));
 
-  // Бойові бонуси речей (атрибути з речей уже враховані вище)
+  // Бойові бонуси речей (атрибути з речей уже враховані вище).
+  // Крит / ухилення / швидкість з ЛЕГЕНДАРНИХ речей відкладаємо окремо:
+  // спершу все інше впирається в ліміт, а легендарні додаються зверху.
+  const legendOver = {};
   for (const slot in save.equipment) {
-    const item = ITEMS[save.equipment[slot]];
-    for (const key in item?.stats || {}) {
-      if (!(key in RPG.ATTRS)) stats[key] = (stats[key] || 0) + item.stats[key];
+    const ref = save.equipment[slot];
+    const st = RPG.itemStats(ref);
+    const legendary = RPG.rarityOf(ref) === "legendary";
+    for (const key in st) {
+      if (key in RPG.ATTRS) continue;
+      if (legendary && RPG.LEGEND_OVERCAP.includes(key)) legendOver[key] = (legendOver[key] || 0) + st[key];
+      else stats[key] = (stats[key] || 0) + st[key];
     }
   }
 
-  stats.crit = Math.min(stats.crit, RPG.STAT_CAP.crit);
-  stats.blockPhys = Math.min(stats.blockPhys, RPG.STAT_CAP.block);
-  stats.blockMag = Math.min(stats.blockMag, RPG.STAT_CAP.block);
+  const CAP = RPG.STAT_CAP;
+  stats.crit = Math.min(stats.crit, CAP.crit);
+  stats.dodge = Math.min(stats.dodge, CAP.dodge);
+  stats.speed = Math.min(stats.speed, CAP.speed);
+  stats.blockPhys = Math.min(stats.blockPhys, CAP.block);
+  stats.blockMag = Math.min(stats.blockMag, CAP.block);
+  addStats(stats, legendOver);   // легендарні — понад ліміт
 
   for (const key in stats) {
     stats[key] = DECIMAL_KEYS.includes(key)
@@ -245,7 +257,7 @@ function applyDeath(save, enemyIds) {
   for (const slot of slots) {
     if (lostItems.length >= limit) break;
     if (Math.random() < ITEM_LOSS_CHANCE) {
-      lostItems.push(save.equipment[slot]);
+      lostItems.push(save.equipment[slot]);   // екземпляр речі (з рідкістю)
       delete save.equipment[slot];
     }
   }
@@ -301,16 +313,16 @@ function changeClass(save, newClassId) {
 
   const removed = [];
   for (const slot in save.equipment) {
-    const id = save.equipment[slot];
-    if (!canEquip(save, id).ok) {
+    const ref = save.equipment[slot];
+    if (!canEquip(save, RPG.refId(ref)).ok) {
       delete save.equipment[slot];
-      addItem(save, id, 1);
-      removed.push(id);
+      addRefToList(save.inventory, ref);
+      removed.push(ref);
     }
   }
 
   fullHeal(save);
-  return { ok: true, removed };
+  return { ok: true, removed, changeBonus: { ...(CLASSES[newClassId].changeBonus || {}) } };
 }
 
 // ---------- Списки предметів (інвентар, сундук) ----------
@@ -320,9 +332,16 @@ function countInList(list, id) {
   return list.filter(e => e.id === id).reduce((sum, e) => sum + e.qty, 0);
 }
 
+// Зброя/броня з рідкістю — окремі екземпляри. Без вказаної рідкості
+// додається звичайна (біла) річ без випадкових бонусів, як із магазину.
 function addToList(list, id, qty = 1) {
   const item = ITEMS[id];
   if (!item || qty <= 0) return false;
+
+  if (RPG.hasRarity(id)) {
+    for (let i = 0; i < qty; i++) list.push(RPG.makeItem(id, "common", { fromShop: true }));
+    return true;
+  }
 
   if (item.stackable) {
     const max = item.maxStack || 99;
@@ -358,6 +377,15 @@ function removeFromList(list, id, qty = 1) {
   return true;
 }
 
+// Покласти вже готовий запис (річ з рідкістю — як є, стопку — докупи)
+function addRefToList(list, ref) {
+  ref = RPG.normalizeRef(ref);
+  if (!ref || !ITEMS[ref.id]) return false;
+  if (ITEMS[ref.id].stackable) return addToList(list, ref.id, ref.qty || 1);
+  list.push(ref);
+  return true;
+}
+
 function countItem(save, id)          { return countInList(save.inventory, id); }
 function addItem(save, id, qty = 1)    { return addToList(save.inventory, id, qty); }
 function removeItem(save, id, qty = 1) { return removeFromList(save.inventory, id, qty); }
@@ -374,7 +402,7 @@ function moveToChest(save, invIndex) {
   const entry = save.inventory[invIndex];
   if (!entry) return { ok: false, reason: "Порожня клітинка." };
   save.inventory.splice(invIndex, 1);
-  addToList(save.chest, entry.id, entry.qty);
+  addRefToList(save.chest, entry);
   return { ok: true, id: entry.id, qty: entry.qty };
 }
 
@@ -383,7 +411,7 @@ function takeFromChest(save, chestIndex) {
   const entry = save.chest[chestIndex];
   if (!entry) return { ok: false, reason: "Порожня клітинка." };
   save.chest.splice(chestIndex, 1);
-  addItem(save, entry.id, entry.qty);
+  addRefToList(save.inventory, entry);
   return { ok: true, id: entry.id, qty: entry.qty };
 }
 
@@ -402,34 +430,44 @@ function canEquip(save, id) {
   return { ok: true };
 }
 
-function equipItem(save, id) {
-  const item = ITEMS[id];
-  const check = canEquip(save, id);
-  if (!check.ok) return check;
-  if (!removeItem(save, id, 1)) return { ok: false, reason: "Предмета немає в інвентарі." };
+// what — номер клітинки інвентаря (або ID — тоді береться перша така річ)
+function invIndexOf(save, what) {
+  if (typeof what === "number") return what;
+  return save.inventory.findIndex(e => e.id === what);
+}
 
+function equipItem(save, what) {
+  const index = invIndexOf(save, what);
+  const entry = save.inventory[index];
+  if (!entry) return { ok: false, reason: "Предмета немає в інвентарі." };
+  const item = ITEMS[entry.id];
+  const check = canEquip(save, entry.id);
+  if (!check.ok) return check;
+
+  save.inventory.splice(index, 1);
   const old = save.equipment[item.slot];
-  if (old) addItem(save, old, 1);
-  save.equipment[item.slot] = id;
+  if (old) save.inventory.splice(index, 0, RPG.normalizeRef(old));  // знята річ — у ту ж клітинку
+  save.equipment[item.slot] = RPG.normalizeRef(entry);
   clampHpMp(save);
-  return { ok: true, replaced: old || null };
+  return { ok: true, replaced: old || null, ref: entry };
 }
 
 function unequipItem(save, slot) {
-  const id = save.equipment[slot];
-  if (!id) return { ok: false, reason: "Слот порожній." };
+  const ref = save.equipment[slot];
+  if (!ref) return { ok: false, reason: "Слот порожній." };
   delete save.equipment[slot];
-  addItem(save, id, 1);
+  addRefToList(save.inventory, ref);
   clampHpMp(save);
-  return { ok: true };
+  return { ok: true, ref };
 }
 
-// Як зміняться характеристики, якщо вдягнути предмет
-function previewEquip(save, id) {
-  const item = ITEMS[id];
+// Як зміняться характеристики, якщо вдягнути предмет з клітинки інвентаря
+function previewEquip(save, what) {
+  const entry = save.inventory[invIndexOf(save, what)];
+  const item = ITEMS[entry?.id];
   if (!item?.slot) return {};
   const before = calcStats(save);
-  const test = { ...save, equipment: { ...save.equipment, [item.slot]: id } };
+  const test = { ...save, equipment: { ...save.equipment, [item.slot]: entry } };
   const after = calcStats(test);
   const diff = {};
   for (const key in after) {
@@ -487,22 +525,39 @@ function buyItem(save, id) {
   return { ok: true, price };
 }
 
-function sellItem(save, invIndex) {
+// qty — скільки штук продати з цієї клітинки (за замовчуванням 1,
+// більше ніж є — продається вся стопка)
+function sellItem(save, invIndex, qty = 1) {
   if (!currentShop(save)) return { ok: false, reason: "Тут немає торговця." };
   const entry = save.inventory[invIndex];
   if (!entry) return { ok: false, reason: "Порожня клітинка." };
-  const price = RPG.shopBuyPrice(entry.id);
-  entry.qty -= 1;
+  qty = Math.floor(Number(qty));
+  if (!(qty >= 1)) return { ok: false, reason: "Вкажіть кількість від 1." };
+  qty = Math.min(qty, entry.qty);
+  const price = RPG.refSellPrice(entry) * qty;   // рідкісніша річ — дорожча
+  entry.qty -= qty;
   if (entry.qty <= 0) save.inventory.splice(invIndex, 1);
   save.character.gold += price;
-  return { ok: true, id: entry.id, price };
+  return { ok: true, id: entry.id, qty, price, ref: entry };
 }
 
 // ---------- Нагорода за бій ----------
 
 function applyReward(save, exp, loot) {
   save.character.gold += loot?.gold || 0;
-  for (const it of loot?.items || []) addItem(save, it.id, it.qty);
+  for (const it of loot?.items || []) {
+    if (RPG.hasRarity(it.id)) {
+      // зброя/броня: рідкість кожної речі визначається окремо (з лічильником удачі)
+      it.refs = [];
+      for (let i = 0; i < it.qty; i++) {
+        const ref = RPG.makeItem(it.id, RPG.rollRarity(save));
+        save.inventory.push(ref);
+        it.refs.push(ref);
+      }
+    } else {
+      addItem(save, it.id, it.qty);
+    }
+  }
   return addExp(save, exp);   // масив нових рівнів
 }
 
@@ -512,7 +567,7 @@ Object.assign(RPG, {
   regenPerTick, applyRegen, msToNextRegen,
   addExp, removeExp, expProgress, applyDeath, pray,
   getClassChanges, changeClass,
-  countInList, addToList, removeFromList, countItem, addItem, removeItem,
+  countInList, addToList, addRefToList, removeFromList, countItem, addItem, removeItem,
   isAtHome, moveToChest, takeFromChest,
   canEquip, equipItem, unequipItem, previewEquip, useItem,
   currentShop, buyItem, sellItem, applyReward

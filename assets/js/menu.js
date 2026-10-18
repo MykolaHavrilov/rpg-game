@@ -3,11 +3,35 @@
 document.addEventListener('DOMContentLoaded', () => {
 
   // ---- Кнопки «Назад» (data-back) --------------------------------
-  // Якщо гравець прийшов з іншої сторінки гри — повертаємо його туди
-  // (наприклад, з налаштувань назад у бій). Інакше працює звичайне
-  // посилання з href (запасний варіант — головне меню).
+  // Налаштування: повертаємо туди, звідки їх відкрили
+  // (settings.html?from=character → character.html).
+  // Якщо в налаштуваннях імпортували сейв — гра вже завантажена,
+  // тож ведемо на сторінку персонажа.
+  // Інші сторінки: якщо є історія — крок назад, інакше href (головне меню).
+  const BACK_TARGETS = {
+    index:     '../index.html',
+    game:      'game.html',
+    character: 'character.html',
+    inventory: 'inventory.html',
+    maps:      'maps.html'
+  };
+
+  function settingsBackTarget() {
+    if (document.body.dataset.gameLoaded === '1') return 'character.html';
+    const from = new URLSearchParams(location.search).get('from');
+    if (from && BACK_TARGETS[from]) return BACK_TARGETS[from];
+    // Невідомо, звідки прийшли: є активна гра — до персонажа, інакше в меню
+    const hasGame = window.RPG && RPG.getCurrentSlot && RPG.getCurrentSlot();
+    return hasGame ? 'character.html' : '../index.html';
+  }
+
   document.querySelectorAll('[data-back]').forEach(link => {
     link.addEventListener('click', event => {
+      if (document.body.dataset.page === 'settings') {
+        event.preventDefault();
+        location.href = settingsBackTarget();
+        return;
+      }
       const cameFromGame = document.referrer && history.length > 1;
       if (cameFromGame) {
         event.preventDefault();

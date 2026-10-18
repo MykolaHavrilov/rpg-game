@@ -306,3 +306,15 @@ dialog { max-width: calc(100vw - 32px); }
 
   .dialog-actions { flex-direction: column; }
 }
+
+/* ---------- Рідкість зброї та броні (rarity.js) ---------- */
+.rarity-broken    { box-shadow: inset 0 0 0 2px #7d7d7d; }
+.rarity-common    { box-shadow: inset 0 0 0 1px rgba(232, 232, 232, .45); }
+.rarity-magic     { box-shadow: inset 0 0 0 2px #4f8dff, 0 0 6px rgba(79, 141, 255, .45); }
+.rarity-epic      { box-shadow: inset 0 0 0 2px #b265ff, 0 0 8px rgba(178, 101, 255, .55); }
+.rarity-legendary { box-shadow: inset 0 0 0 2px #ff9d2e, 0 0 10px rgba(255, 157, 46, .7); }
+.rt-broken    { color: #a3a3a3; }
+.rt-common    { color: #f0f0f0; }
+.rt-magic     { color: #6ea2ff; }
+.rt-epic      { color: #c58bff; }
+.rt-legendary { color: #ffb04d; text-shadow: 0 0 6px rgba(255, 157, 46, .5); }

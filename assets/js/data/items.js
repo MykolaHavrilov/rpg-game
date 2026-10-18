@@ -9,6 +9,7 @@
 // price   — базова вартість. Торговець продає за 150%, купує за 50%.
 // noShop  — торговець цю річ НЕ продає (лише здобич з ворогів).
 // rarity  — "rare" підсвічується в інвентарі.
+// maxStack — скільки штук в одній клітинці: зілля 100, ресурси 200.
 // effect  — для зілля: healHp / healMp (одиниці),
 //           healHpPct / healMpPct (частка від максимуму: 0.5 = 50%).
 // ============================================================
@@ -41,6 +42,7 @@ const STAT_NAMES = {
   crit: "Шанс криту, %",
   blockPhys: "Блок фіз. шкоди, %",
   blockMag: "Блок маг. шкоди, %",
+  dodge: "Ухилення, %",
   hpRegen: "Відновлення HP за 10 с",
   mpRegen: "Відновлення MP за 10 с",
   str: "Сила",
@@ -192,43 +194,43 @@ const ITEMS = {
   // Малі та середні продає шинкар; великі та чарівне — лише з ворогів.
   potion_hp_small: {
     name: "Мале зілля здоров'я", img: "potion_hp_small.webp",
-    type: "consumable", price: 5, stackable: true, maxStack: 20,
+    type: "consumable", price: 5, stackable: true, maxStack: 100,
     effect: { healHp: 30 },
     description: "Відновлює 30 здоров'я."
   },
   potion_hp_medium: {
     name: "Середнє зілля здоров'я", img: "potion_hp_medium.webp",
-    type: "consumable", price: 15, stackable: true, maxStack: 20,
+    type: "consumable", price: 15, stackable: true, maxStack: 100,
     effect: { healHp: 80 },
     description: "Відновлює 80 здоров'я."
   },
   potion_hp_large: {
     name: "Велике зілля здоров'я", img: "potion_hp_large.webp",
-    type: "consumable", price: 45, stackable: true, maxStack: 20, noShop: true,
+    type: "consumable", price: 45, stackable: true, maxStack: 100, noShop: true,
     effect: { healHp: 200 },
     description: "Відновлює 200 здоров'я. Торговці таким не торгують."
   },
   potion_mp_small: {
     name: "Мале зілля мани", img: "potion_mp_small.webp",
-    type: "consumable", price: 6, stackable: true, maxStack: 20,
+    type: "consumable", price: 6, stackable: true, maxStack: 100,
     effect: { healMp: 20 },
     description: "Відновлює 20 мани."
   },
   potion_mp_medium: {
     name: "Середнє зілля мани", img: "potion_mp_medium.webp",
-    type: "consumable", price: 18, stackable: true, maxStack: 20,
+    type: "consumable", price: 18, stackable: true, maxStack: 100,
     effect: { healMp: 50 },
     description: "Відновлює 50 мани."
   },
   potion_mp_large: {
     name: "Велике зілля мани", img: "potion_mp_large.webp",
-    type: "consumable", price: 50, stackable: true, maxStack: 20, noShop: true,
+    type: "consumable", price: 50, stackable: true, maxStack: 100, noShop: true,
     effect: { healMp: 120 },
     description: "Відновлює 120 мани. Торговці таким не торгують."
   },
   potion_magic: {
     name: "Чарівне зілля", img: "potion_magic.webp",
-    type: "consumable", price: 150, stackable: true, maxStack: 10, noShop: true, rarity: "rare",
+    type: "consumable", price: 150, stackable: true, maxStack: 100, noShop: true, rarity: "rare",
     effect: { healHpPct: 0.5, healMpPct: 0.3 },
     description: "Дуже рідкісне. Відновлює 50% здоров'я та 30% мани."
   },
@@ -236,32 +238,32 @@ const ITEMS = {
   // ---------- МАТЕРІАЛИ (здобич з ворогів) ----------
   rat_tail: {
     name: "Щурячий хвіст", img: "rat_tail.webp",
-    type: "material", price: 2, stackable: true, maxStack: 99,
+    type: "material", price: 2, stackable: true, maxStack: 200,
     description: "Трофей з льоху. Торговці купують за мідяк."
   },
   rat_skin: {
     name: "Щуряча шкурка", img: "rat_skin.webp",
-    type: "material", price: 3, stackable: true, maxStack: 99,
+    type: "material", price: 3, stackable: true, maxStack: 200,
     description: "Дрібна, але шкірник візьме."
   },
   wolf_pelt: {
     name: "Вовча шкура", img: "wolf_pelt.webp",
-    type: "material", price: 6, stackable: true, maxStack: 99,
+    type: "material", price: 6, stackable: true, maxStack: 200,
     description: "Можна продати торговцю."
   },
   wolf_fang: {
     name: "Вовче ікло", img: "wolf_fang.webp",
-    type: "material", price: 5, stackable: true, maxStack: 99,
+    type: "material", price: 5, stackable: true, maxStack: 200,
     description: "Гостре. Згодиться на амулет."
   },
   white_pelt: {
     name: "Біла вовча шкура", img: "white_pelt.webp",
-    type: "material", price: 12, stackable: true, maxStack: 99,
+    type: "material", price: 12, stackable: true, maxStack: 200,
     description: "Рідкісне хутро, за нього добре платять."
   },
   slime_gel: {
     name: "Слиз", img: "slime_gel.webp",
-    type: "material", price: 2, stackable: true, maxStack: 99,
+    type: "material", price: 2, stackable: true, maxStack: 200,
     description: "Липкий і трохи світиться."
   }
 };

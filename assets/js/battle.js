@@ -11,6 +11,7 @@
 //   Магічна зброя (магія > атаки, напр. посох) — герой кидає «Іскру»,
 //       коли мани немає — б'є зброєю.
 //   Крит — шкода × 1.5. Блок (фізичний / магічний) — половина шкоди.
+//   Ухилення (dodge, %) — удар зовсім не влучає.
 //   Швидкість — хто б'є першим + шанс додаткового «швидкого» удару
 //       (до 30%), якщо ти швидший за суперника.
 // ============================================================
@@ -38,9 +39,10 @@
 
   // Опис того, чим б'є герой, залежно від спорядження
   function heroWeapon(save) {
-    const item = RPG.ITEMS[save.equipment.mainHand];
+    const ref = save.equipment.mainHand;
+    const item = RPG.ITEMS[RPG.refId(ref)];
     if (!item) return { name: "кулаками", magic: false };
-    const st = item.stats || {};
+    const st = RPG.itemStats(ref);
     return { name: item.name, magic: (st.magic || 0) > (st.attack || 0) };
   }
 
@@ -58,6 +60,9 @@
     let text, dmg, blocked;
 
     const castSpell = (action === "spell" || weapon.magic) && state.heroMp >= SPELL_COST;
+    if (!castSpell && Math.random() * 100 < (es.dodge || 0)) {
+      return { who: "hero", text: `${quick ? "Швидкий удар! " : ""}${ctx.heroName} б'є, але ${enemy.name} ухиляється`, crit: false };
+    }
     if (castSpell) {
       state.heroMp -= SPELL_COST;
       blocked = Math.random() * 100 < (es.blockMag || 0);
@@ -79,6 +84,9 @@
 
   function enemyAction(ctx, quick) {
     const { hero, enemy, state } = ctx;
+    if (Math.random() * 100 < (hero.dodge || 0)) {
+      return { who: "enemy", text: `${quick ? "Швидкий напад! " : ""}${enemy.name} кидається, але ${ctx.heroName} ухиляється!`, crit: false };
+    }
     const crit = Math.random() * 100 < (enemy.stats.crit || 0);
     const blocked = Math.random() * 100 < hero.blockPhys;
     const dmg = finishHit(mitigate(enemy.stats.attack * variance(), hero.defense), crit, blocked);

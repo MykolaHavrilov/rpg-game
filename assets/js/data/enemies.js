@@ -133,6 +133,7 @@
   //   "tavern" — Шинок: торговець (shop — що він продає)
   //   "combat" — бойова локація (enemies — хто трапляється)
   // locked: true — «Закрито — відкриється згодом»
+  // minLevel: N — вхід лише з N рівня героя
   // ID локацій НЕ перейменовувати (вони в сейвах). village_start — це Ферма.
   const LOCATIONS = {
     home: {
@@ -148,8 +149,8 @@
     village_start: {
       name: "Ферма",
       type: "combat",
-      description: "Звідки беруться ці щури — з льоху під коморою, з підвалу під амбаром чи з поля? Та й вони тут не найстрашніші…",
-      enemies: ["rat", "rat2", "rat3", "wolf", "wolf2", "wolf3"]
+      description: "Звідки беруться ці щури — з льоху під коморою, з підвалу під амбаром чи з поля? Тут водяться лише вони, а от за полем, у лісі, вже виють вовки…",
+      enemies: ["rat", "rat2", "rat3"]
     },
     tavern: {
       name: "Шинок біля млина",
@@ -165,9 +166,9 @@
     forest_path: {
       name: "Лісова стежка",
       type: "combat",
-      locked: true,
-      description: "Закрито — відкриється згодом.",
-      enemies: []
+      minLevel: 3,
+      description: "Вузька стежка між темних ялин. Тут полюють вовки — сірі, чорні, а подекуди й білі. Новачкам сюди зарано.",
+      enemies: ["wolf", "wolf2", "wolf3"]
     },
     forest_cave: {
       name: "Печера в лісі",
@@ -196,6 +197,17 @@
   function isCombatLocation(id) {
     const loc = getLocation(id);
     return loc.type === "combat" && !loc.locked && (loc.enemies || []).length > 0;
+  }
+
+  // Чи пускають героя на локацію: { ok, reason }
+  function canEnterLocation(id, heroLevel = 1) {
+    const loc = LOCATIONS[id];
+    if (!loc) return { ok: false, reason: "Такої локації немає." };
+    if (loc.locked) return { ok: false, reason: "Закрито — відкриється згодом." };
+    if (loc.minLevel && heroLevel < loc.minLevel) {
+      return { ok: false, reason: `${loc.name}: вхід з ${loc.minLevel} рівня персонажа.` };
+    }
+    return { ok: true };
   }
 
   // Випадковий ворог для локації.
@@ -236,6 +248,6 @@
 
   Object.assign(RPG, {
     ENEMIES, LOCATIONS, DEFAULT_LOCATION, RESPAWN_LOCATION,
-    getEnemy, enemyImg, getLocation, isCombatLocation, pickEnemy, rollLoot
+    getEnemy, enemyImg, getLocation, isCombatLocation, canEnterLocation, pickEnemy, rollLoot
   });
 })(window.RPG);

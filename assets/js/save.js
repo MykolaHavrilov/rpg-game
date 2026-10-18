@@ -12,7 +12,7 @@
   const STORE = "saves";
   const LS_PREFIX = "rpg_save_"; // запасне сховище в localStorage
 
-  const SAVE_VERSION = 2;        // версія ФОРМАТУ сейву (полів усередині)
+  const SAVE_VERSION = 3;        // версія ФОРМАТУ сейву (полів усередині)
   const CURRENT_SLOT_KEY = "rpg_current_slot";
 
   // ---------- Відкриття бази ----------
@@ -155,6 +155,17 @@
   // Викликається при КОЖНОМУ завантаженні. Коли змінюєш формат сейву,
   // збільш SAVE_VERSION і додай сюди блок "if (save.saveVersion < N)".
 
+  // Зводить неповні стопки однакових предметів докупи (напр. після
+  // збільшення maxStack дві клітинки по 99 хвостів стають однією на 198)
+  function compactStacks(list) {
+    const out = [];
+    for (const entry of list) {
+      if (RPG.ITEMS[entry.id]?.stackable) RPG.addToList(out, entry.id, entry.qty);
+      else out.push(entry);
+    }
+    return out;
+  }
+
   function migrateSave(save) {
     const ITEMS = RPG.ITEMS;
     // Заповнюємо поля, яких могло не бути у старих сейвах
@@ -189,12 +200,18 @@
     save.character.deaths ??= 0;
     save.character.regenAt ??= Date.now();
 
+    // Версія 3: рідкість речей. Старі речі (рядок-ID) стають білими (common)
+    for (const slot in save.equipment) save.equipment[slot] = RPG.normalizeRef(save.equipment[slot]);
+    save.inventory = save.inventory.map(RPG.normalizeRef).filter(Boolean);
+    save.chest = save.chest.map(RPG.normalizeRef).filter(Boolean);
+    save.lootLuck = Object.assign(RPG.newLuck(), save.lootLuck || {});
+
     // Прибираємо предмети, яких більше немає в довіднику
     for (const slot in save.equipment) {
-      if (!ITEMS[save.equipment[slot]]) delete save.equipment[slot];
+      if (!ITEMS[save.equipment[slot]?.id]) delete save.equipment[slot];
     }
-    save.inventory = save.inventory.filter(entry => ITEMS[entry.id] && entry.qty > 0);
-    save.chest = save.chest.filter(entry => ITEMS[entry.id] && entry.qty > 0);
+    save.inventory = compactStacks(save.inventory.filter(entry => ITEMS[entry.id] && entry.qty > 0));
+    save.chest = compactStacks(save.chest.filter(entry => ITEMS[entry.id] && entry.qty > 0));
 
     // HP/MP мають бути числами (у старих сейвах могло бути 0 «до підрахунку»)
     if (typeof save.character.hp !== "number" || typeof save.character.mp !== "number") {
