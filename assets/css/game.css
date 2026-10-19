@@ -324,3 +324,29 @@ figure.is-champion figcaption { color: #ffd76a; font-weight: 700; }
   50% { box-shadow: 0 0 0 3px #ffe08a, 0 0 28px 8px rgba(242, 193, 78, .85); }
 }
 @media (prefers-reduced-motion: reduce) { figure.is-champion { animation: none; } }
+
+/* ---------- Група героїв і кілька ворогів (game.js) ---------- */
+.party-list { display: grid; gap: 6px; }
+.party-title { font-size: .85rem; opacity: .85; }
+.party-row {
+  display: flex; gap: 8px; align-items: center;
+  padding: 4px 6px; border-radius: 6px;
+  background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .12);
+}
+.party-row.is-dead { opacity: .5; filter: grayscale(1); }
+.party-row.is-champion { border-color: #f2c14e; box-shadow: 0 0 6px rgba(242, 193, 78, .5); }
+.party-face {
+  flex: 0 0 44px; width: 44px; height: 44px; border-radius: 4px;
+  background-color: rgba(0, 0, 0, .25); background-repeat: no-repeat;
+}
+.party-info { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.party-info strong { font-size: .8rem; line-height: 1.2; overflow-wrap: anywhere; }
+.bar.bar-mini { min-height: 18px; border-width: 1px; border-radius: 4px; }
+.bar.bar-mini .bar-label { padding: 1px 6px; font-size: .66rem; line-height: 1.25; }
+.member-tabs { gap: 6px; flex-wrap: wrap; }
+.member-tabs .member-tab { flex: 0 1 auto; min-height: 34px; padding: 4px 10px; font-size: .85rem; }
+.explore-card {
+  padding: 10px; border-radius: 8px;
+  border: 1px solid rgba(242, 193, 78, .6); background: rgba(242, 193, 78, .08);
+}
+.map-district { border-radius: 30%; }

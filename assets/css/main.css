@@ -45,7 +45,6 @@ header, main, footer {
 }
 main { flex: 1; }
 
-h1.page-title { margin: 8px 0 16px; font-size: 1.6rem; }
 
 /* ---------- Базовий «каркасний» блок ---------- */
 .wf {
@@ -236,7 +235,7 @@ button.wf:disabled {
 .slots .wf { min-width: 0; overflow: hidden; overflow-wrap: anywhere; line-height: 1.2; }
 .slots button.wf:disabled { opacity: .8; cursor: default; }
 
-/* ---------- Іконки предметів (assets/img/items/*.webp, 128×128) ---------- */
+/* ---------- Іконки предметів (спрайт-листи assets/img/items/*.webp, клітинка 128×128) ---------- */
 .slots .wf { position: relative; }
 .slots .wf.has-icon { padding: 0; overflow: hidden; }
 .item-icon {
@@ -288,7 +287,6 @@ dialog { max-width: calc(100vw - 32px); }
   header, main, footer {
     padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
   }
-  h1.page-title { font-size: 1.35rem; margin: 4px 0 12px; }
 
   /* Навігація: компактна сітка по 3 кнопки в ряд замість 6 рядків */
   header nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -318,6 +316,24 @@ dialog { max-width: calc(100vw - 32px); }
 .rt-magic     { color: #6ea2ff; }
 .rt-epic      { color: #c58bff; }
 .rt-legendary { color: #ffb04d; text-shadow: 0 0 6px rgba(255, 157, 46, .5); }
+
+/* ---------- Спрайт-листи: іконки предметів і герой ---------- */
+.sprite-icon { display: inline-block; flex: 0 0 auto; background-repeat: no-repeat; }
+.item-icon.sprite-icon { display: block; }
+.ri-broken { filter: grayscale(1) brightness(.75); }          /* зламана річ — сіра */
+.hero-sprite {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  transform: translateY(-55%);
+  background-repeat: no-repeat;
+}
+
+/* Герой з шарів («паперова лялька», data/classes.js → heroDoll) */
+.doll-layer { position: absolute; background-repeat: no-repeat; pointer-events: none; }
+.doll-base  { inset: 0; }
 
 /* ---------- Заглушки для предметів без картинки ---------- */
 .item-ph {

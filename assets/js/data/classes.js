@@ -29,7 +29,6 @@
     peasant: {
       name: "Рекрут",
       description: "Звичайний мешканець села, що вирушив назустріч пригодам.",
-      img: "assets/images/hero_1_farm_sunset.webp",
       tier: 1,
       levelTable: "standard",
       baseStats: { hp: 100, mp: 30, attack: 5, magic: 2, defense: 3, magicDefense: 1, speed: 5, crit: 5 },
@@ -53,7 +52,6 @@
     // knight: {
     //   name: "Рицар",
     //   description: "Важка броня і надійний меч.",
-    //   img: "assets/images/hero_2_forest_cottage.webp",
     //   tier: 2,
     //   levelTable: "standard",
     //   requires: { from: ["peasant"], level: 10 },
@@ -65,7 +63,6 @@
     // mage: {
     //   name: "Маг",
     //   description: "Сила заклинань замість сили м'язів.",
-    //   img: "assets/images/hero_3_night_farm.webp",
     //   tier: 2,
     //   levelTable: "standard",
     //   requires: { from: ["peasant"], level: 10 },
@@ -77,7 +74,6 @@
     // archer: {
     //   name: "Лучник",
     //   description: "Швидкий і влучний.",
-    //   img: "assets/images/hero_2_forest_cottage.webp",
     //   tier: 2,
     //   levelTable: "standard",
     //   requires: { from: ["peasant"], level: 10 },
@@ -92,9 +88,78 @@
     return CLASSES[id] || CLASSES[DEFAULT_CLASS];
   }
 
-  // Повний шлях до картинки героя
-  function classImg(id) {
-    return RPG.asset(getClass(id).img);
+  // ---------- ВИГЛЯД ГЕРОЯ: «ПАПЕРОВА ЛЯЛЬКА» ----------
+  // Основа — герой з порожніми руками (кадр 0 листа Heroes_start, 256×256).
+  // Поверх у кисті кладуться іконки зброї з листів предметів (data/items.js),
+  // а над руків'ям ще раз малюється кулак — ніби герой тримає річ.
+  // Усі координати — у пікселях кадру 256×256:
+  //   HERO_HANDS — центри кулаків (main — права рука героя, на картинці зліва).
+  //   size  — розмір іконки (сторона квадрата), rot — поворот за годинниковою, градуси,
+  //   grip  — точка хвату в іконці (частки 0…1 від її сторони), off — зсув від кулака,
+  //   behind: true — річ за спиною (колчан), fist: true — домалювати кулак поверх.
+  const HERO_EXT = ".webp";
+  const HERO_BASE = { sheet: "assets/images/Heroes_start", cols: 3, rows: 2, size: 256, gap: 2, index: 0 };
+  const HERO_HANDS = { main: [82, 130], off: [168, 131] };
+  const HERO_FIST_R = 13;
+  const DOLL_MAIN = {                       // ключ — weaponType
+    sword:  { size: 96,  rot: 90,  grip: [0.22, 0.78], fist: true },
+    dagger: { size: 74,  rot: 90,  grip: [0.22, 0.78], fist: true },
+    axe:    { size: 96,  rot: 90,  grip: [0.22, 0.85], fist: true },
+    bow:    { size: 124, rot: -40, grip: [0.26, 0.66], fist: true },
+    staff:  { size: 150, rot: -32, grip: [0.30, 0.70], fist: true }
+  };
+  const DOLL_OFF = {                        // ключ — offType
+    shield: { size: 72, rot: 0,  grip: [0.5, 0.5],  off: [4, -8] },
+    quiver: { size: 84, rot: 15, grip: [0.5, 0.5],  off: [-22, -62], behind: true },
+    orb:    { size: 44, rot: 0,  grip: [0.5, 0.62], off: [0, -6] },
+    knife:  { size: 62, rot: 90, grip: [0.22, 0.78], fist: true }
+  };
+
+  const pct = v => `${(v / 256) * 100}%`;
+
+  // Опис шарів героя: { base, layers: [{ ref, behind, style, fist }], fists: [[x, y]] }
+  function heroDoll(save) {
+    const eq = save.equipment || {};
+    const base = RPG.spriteStyle(RPG.asset(HERO_BASE.sheet + HERO_EXT), HERO_BASE.cols, HERO_BASE.rows,
+                                 HERO_BASE.size, HERO_BASE.gap, HERO_BASE.index);
+    const layers = [];
+    const fists = [];
+    const add = (slot, hand, cfg) => {
+      const ref = eq[slot];
+      const icon = ref && RPG.itemIconStyle(RPG.refId(ref));
+      if (!cfg || !icon) return;
+      const [hx, hy] = HERO_HANDS[hand];
+      const [dx, dy] = cfg.off || [0, 0];
+      const [gx, gy] = cfg.grip;
+      layers.push({
+        ref, behind: !!cfg.behind,
+        style: Object.assign({}, icon, {
+          left: pct(hx + dx - gx * cfg.size),
+          top: pct(hy + dy - gy * cfg.size),
+          width: pct(cfg.size),
+          height: pct(cfg.size),
+          transformOrigin: `${gx * 100}% ${gy * 100}%`,
+          transform: `rotate(${cfg.rot}deg)`
+        })
+      });
+      if (cfg.fist && !cfg.behind) fists.push([hx, hy]);
+    };
+    const main = RPG.ITEMS[RPG.refId(eq.mainHand)];
+    const off = RPG.ITEMS[RPG.refId(eq.offHand)];
+    add("offHand", "off", off && DOLL_OFF[off.offType]);
+    add("mainHand", "main", main && DOLL_MAIN[main.weaponType]);
+    return { base, layers, fists };
+  }
+
+  // Кулак поверх руків'я: копія основи, обрізана колом навколо кисті
+  function heroFistStyle(base, x, y) {
+    return Object.assign({}, base, { clipPath: `circle(${pct(HERO_FIST_R)} at ${pct(x)} ${pct(y)})` });
+  }
+
+  // CSS-стиль основи (герой з порожніми руками) — для простих місць без шарів
+  function heroSpriteStyle() {
+    return RPG.spriteStyle(RPG.asset(HERO_BASE.sheet + HERO_EXT), HERO_BASE.cols, HERO_BASE.rows,
+                           HERO_BASE.size, HERO_BASE.gap, HERO_BASE.index);
   }
 
   // Список професій, на які персонаж може перейти зараз
@@ -107,5 +172,5 @@
     });
   }
 
-  Object.assign(RPG, { DEFAULT_CLASS, CLASSES, getClass, classImg, availableClassChanges });
+  Object.assign(RPG, { DEFAULT_CLASS, CLASSES, getClass, heroDoll, heroFistStyle, heroSpriteStyle, availableClassChanges });
 })(window.RPG);

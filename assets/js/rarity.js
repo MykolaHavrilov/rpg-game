@@ -14,7 +14,7 @@
 //
 // Однакові бонуси, що випали двічі, складаються.
 //
-// Предмет у сейві (інвентар, сундук, екіпірування):
+// Предмет у сейві (інвентар, скриня, екіпірування):
 //   { id: "sword_iron", qty: 1, r: "magic", aff: { str: 2, crit: 1 } }
 //   r   — рідкість, aff — випадкові бонуси (для common з магазину — немає)
 //
@@ -150,7 +150,7 @@
     return aff;
   }
 
-  // Створити екземпляр речі (для інвентаря/сундука)
+  // Створити екземпляр речі (для інвентаря/скрині)
   function makeItem(id, r = "common", opts = {}) {
     if (!hasRarity(id)) return { id, qty: 1 };
     if (!RARITIES[r]) r = "common";
@@ -240,14 +240,11 @@
     return `${itemName(ref)} [${RARITIES[rarityOf(ref)].name}]`;
   }
 
-  // Картинка: для білої — оригінал, для інших — копія з рамкою/палітрою
-  function itemImgRef(ref) {
-    const id = refId(ref);
-    const r = rarityOf(ref);
-    const src = RPG.itemImg(id);
-    if (!src) return null;                 // картинки немає — заглушка
-    if (!hasRarity(id) || r === "common") return src;
-    return src.replace(/\.(png|webp)$/i, `_${r}.$1`);
+  // Іконка: одна й та сама клітинка спрайт-листа для всіх рідкостей.
+  // Рідкість показує CSS (рамка .rarity-*, сіра «зламана» .ri-broken).
+  // null — іконки немає, буде заглушка з назвою.
+  function itemIconRef(ref) {
+    return RPG.itemIconStyle(refId(ref));
   }
 
   function refSellPrice(ref) {
@@ -271,6 +268,6 @@
   Object.assign(RPG, {
     RARITY_ORDER, RARITIES, DROP_WEIGHTS, LUCK, LEGEND_OVERCAP, CORE_KEYS,
     refId, hasRarity, rarityOf, makeItem, rollRarity, newLuck,
-    itemStats, itemName, itemFullName, itemImgRef, refSellPrice, normalizeRef
+    itemStats, itemName, itemFullName, itemIconRef, refSellPrice, normalizeRef
   });
 })(window.RPG);

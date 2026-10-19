@@ -19,6 +19,10 @@
 //   або ID активної навички (data/skills.js). Навичка спрацьовує, якщо
 //   вона вивчена, вдягнена її зброя і вистачає мани — інакше звичайний удар.
 //   Бафи діють кілька раундів, отрута — 3 ходи ворога.
+//
+// Вороги з маною (data/enemies.js): spell — магічна атака з шансом, якщо вистачає MP;
+//   skills — навички боса, по черзі кожен 3-й власний хід (magic / heal / stun).
+//   Магія ворога = сила магії × mult проти магічного захисту героя (блок — маг. блоком).
 // ============================================================
 
 (function (RPG) {
@@ -171,8 +175,58 @@
     return { who: "hero", text, crit };
   }
 
+  // Магічний удар ворога (заклинання або навичка боса)
+  function enemyMagicHit(ctx, name, mp, mult, quick) {
+    const { enemy, state } = ctx;
+    const hero = heroNow(ctx);
+    state.enemyMp -= mp;
+    const crit = Math.random() * 100 < (enemy.stats.crit || 0);
+    const blocked = Math.random() * 100 < (hero.blockMag || 0);
+    const atkDown = state.enemyAtkDown.turns > 0 ? state.enemyAtkDown.pct : 0;
+    const dmg = finishHit(mitigate((enemy.stats.magic || 0) * mult * (1 - atkDown / 100) * variance(), hero.magicDefense), crit, blocked);
+    state.heroHp = Math.max(0, state.heroHp - dmg);
+    let text = `${quick ? "Швидкий напад! " : ""}${enemy.name} — «${name}» (−${mp} MP): ${dmg} магічної шкоди`;
+    if (blocked) text += ` (${ctx.heroName} частково блокує)`;
+    if (crit) text += " — КРИТ!";
+    return { text, crit };
+  }
+
+  // Навичка боса (kind: magic / heal / stun)
+  function enemySkill(sk, ctx) {
+    const { enemy, state } = ctx;
+    if (sk.kind === "heal") {
+      state.enemyMp -= sk.mp;
+      const heal = Math.round(enemy.stats.hp * sk.healPct);
+      const before = state.enemyHp;
+      state.enemyHp = Math.min(enemy.stats.hp, state.enemyHp + heal);
+      return { who: "enemy", text: `${enemy.name} — «${sk.name}» (−${sk.mp} MP): відновлює ${state.enemyHp - before} HP`, crit: false };
+    }
+    const hit = enemyMagicHit(ctx, sk.name, sk.mp, sk.mult || 1, false);
+    if (sk.kind === "stun" && state.heroHp > 0) {
+      state.heroStun = 1;
+      hit.text += `, ${ctx.heroName} застряг у слизу й пропустить хід`;
+    }
+    return { who: "enemy", text: hit.text, crit: hit.crit };
+  }
+
   function enemyAction(ctx, quick) {
     const { enemy, state } = ctx;
+    // Навички боса: кожен 3-й власний (не «швидкий») хід, по черзі
+    if (!quick) {
+      state.enemyTurn++;
+      const skills = enemy.skills || [];
+      if (skills.length && state.enemyTurn % 3 === 0) {
+        const sk = skills[(state.enemyTurn / 3 - 1) % skills.length];
+        if (state.enemyMp >= sk.mp) return enemySkill(sk, ctx);
+      }
+    }
+    // Магічна атака (якщо вистачає мани)
+    const sp = enemy.spell;
+    if (sp && state.enemyMp >= sp.mp && Math.random() < (sp.chance ?? 0.4)) {
+      const hit = enemyMagicHit(ctx, sp.name, sp.mp, sp.mult, quick);
+      return { who: "enemy", text: hit.text, crit: hit.crit };
+    }
+
     const hero = heroNow(ctx);
     if (Math.random() * 100 < (hero.dodge || 0)) {
       return { who: "enemy", text: `${quick ? "Швидкий напад! " : ""}${enemy.name} кидається, але ${ctx.heroName} ухиляється!`, crit: false };
@@ -182,87 +236,200 @@
     const atkDown = state.enemyAtkDown.turns > 0 ? state.enemyAtkDown.pct : 0;
     const dmg = finishHit(mitigate(enemy.stats.attack * (1 - atkDown / 100) * variance(), hero.defense), crit, blocked);
 
+    const verb = enemy.verb || "кусає";
     let text = blocked
-      ? `${enemy.name} кусає, але ${ctx.heroName} блокує частину удару: ${dmg} шкоди`
-      : `${enemy.name} кусає: ${dmg} шкоди`;
+      ? `${enemy.name} ${verb}, але ${ctx.heroName} блокує частину удару: ${dmg} шкоди`
+      : `${enemy.name} ${verb}: ${dmg} шкоди`;
     if (quick) text = "Швидкий напад! " + text;
     if (crit) text += " — КРИТ!";
     state.heroHp = Math.max(0, state.heroHp - dmg);
     return { who: "enemy", text, crit };
   }
 
-  // Повертає { win, draw, rounds, heroHp, heroMp, events, enemyId, enemyIds }
-  // кожна подія: { who, text, heroHp, heroMp, enemyHp, crit }
-  // champion = true — бій з чемпіоном (показники ×3, див. data/enemies.js)
-  function simulateBattle(save, enemyId, champion = false) {
-    const enemy = RPG.getEnemy(enemyId, champion);
-    const base = RPG.calcStats(save);
-    const queue = (save.battleQueue || []).filter(Boolean).slice(0, 10);
-    if (!queue.length) queue.push("attack");
+  // Хід героя: якщо він застряг (навичка «stun») — пропускає
+  function heroTurn(ctx, queue, qRef, quick) {
+    if (ctx.state.heroStun > 0) {
+      ctx.state.heroStun--;
+      return { who: "hero", text: `${ctx.heroName} застряг у слизу й пропускає хід`, crit: false };
+    }
+    return heroAction(queue[qRef.i++ % queue.length], ctx, quick);
+  }
 
-    const ctx = {
-      base, enemy,
-      heroName: save.character.name,
-      weapon: heroWeapon(save),
-      skillLevels: { ...(save.character.skills || {}) },
-      state: {
-        heroHp: Math.floor(save.character.hp), heroMp: Math.floor(save.character.mp), enemyHp: enemy.stats.hp,
-        buffs: {}, dot: null, enemyDefDown: 0, enemyAtkDown: { pct: 0, turns: 0 }
-      }
+  // ---------- Бій групи проти кількох ворогів ----------
+  // Кожен герой і ворог має свій стан; для удару «герой → ворог» або
+  // «ворог → герой» будується пара (ctx) з тим самим інтерфейсом, що й у
+  // бою один на один, тож усі функції вище (навички, магія, бафи) працюють без змін.
+
+  function makeHero(ms) {
+    const queue = (ms.battleQueue || []).filter(Boolean).slice(0, 10);
+    if (!queue.length) queue.push("attack");
+    return {
+      ms, name: ms.character.name, base: RPG.calcStats(ms), weapon: heroWeapon(ms),
+      skillLevels: { ...(ms.character.skills || {}) }, queue, qRef: { i: 0 },
+      hp: Math.floor(ms.character.hp), mp: Math.floor(ms.character.mp), buffs: {}, stun: 0
     };
-    const { state } = ctx;
+  }
+
+  function makeEnemy(spec, label) {
+    const base = RPG.getEnemy(spec.id, spec.champion);
+    const enemy = label ? { ...base, name: label } : base;
+    return {
+      id: spec.id, champion: !!(spec.champion && !base.noChampion), enemy,
+      hp: enemy.stats.hp, mp: enemy.stats.mp || 0, turn: 0,
+      dot: null, defDown: 0, atkDown: { pct: 0, turns: 0 }
+    };
+  }
+
+  // Пара для одного удару: state зв'язує стан героя H і ворога E
+  function pair(H, E) {
+    const state = {
+      get heroHp() { return H.hp; }, set heroHp(v) { H.hp = v; },
+      get heroMp() { return H.mp; }, set heroMp(v) { H.mp = v; },
+      get buffs() { return H.buffs; },
+      get heroStun() { return H.stun; }, set heroStun(v) { H.stun = v; },
+      get enemyHp() { return E.hp; }, set enemyHp(v) { E.hp = v; },
+      get enemyMp() { return E.mp; }, set enemyMp(v) { E.mp = v; },
+      get enemyTurn() { return E.turn; }, set enemyTurn(v) { E.turn = v; },
+      get dot() { return E.dot; }, set dot(v) { E.dot = v; },
+      get enemyDefDown() { return E.defDown; }, set enemyDefDown(v) { E.defDown = v; },
+      get enemyAtkDown() { return E.atkDown; }, set enemyAtkDown(v) { E.atkDown = v; }
+    };
+    return {
+      base: H.base, enemy: E.enemy, heroName: H.name, weapon: H.weapon,
+      skillLevels: H.skillLevels, state
+    };
+  }
+
+  // Однакові вороги отримують номери: «Зелений слайм 1», «Зелений слайм 2»
+  function enemyLabels(specs) {
+    const count = {};
+    for (const s of specs) count[s.id] = (count[s.id] || 0) + 1;
+    const seen = {};
+    return specs.map(s => {
+      if (count[s.id] < 2) return null;
+      seen[s.id] = (seen[s.id] || 0) + 1;
+      const e = RPG.getEnemy(s.id, s.champion);
+      return `${e.name} ${seen[s.id]}`;
+    });
+  }
+
+  // members — «вигляди» героїв (party.js → memberSave), живі; enemySpecs — [{ id, champion }]
+  // Повертає { win, draw, rounds, heroes: [{ hp, mp, dead }], enemies: [{ id, champion, name, exp }],
+  //            events, enemyIds, heroHp, heroMp, champion }
+  // кожна подія: { who, text, crit, heroes: [{hp, mp}], enemies: [{hp, mp}], heroHp, heroMp, enemyHp, enemyMp }
+  function simulatePartyBattle(members, enemySpecs) {
+    const heroes = members.map(makeHero);
+    const labels = enemyLabels(enemySpecs);
+    const foes = enemySpecs.map((spec, i) => makeEnemy(spec, labels[i]));
     const events = [];
     const push = ev => events.push(Object.assign(ev, {
-      heroHp: state.heroHp, heroMp: state.heroMp, enemyHp: state.enemyHp
+      heroes: heroes.map(h => ({ hp: h.hp, mp: h.mp })),
+      enemies: foes.map(f => ({ hp: f.hp, mp: f.mp })),
+      heroHp: heroes[0].hp, heroMp: heroes[0].mp, enemyHp: foes[0].hp, enemyMp: foes[0].mp
     }));
+    const aliveH = () => heroes.filter(h => h.hp > 0);
+    const aliveE = () => foes.filter(f => f.hp > 0);
+    const going = () => aliveH().length > 0 && aliveE().length > 0;
+    const speedOf = u => (u.base ? heroNow(pair(u, foes[0])).speed : u.enemy.stats.speed);
 
-    push({ who: "info", text: `Бій починається: ${ctx.heroName} проти «${enemy.name}» (рівень ${enemy.level}).` });
+    const heroNames = heroes.map(h => h.name).join(", ");
+    const foeNames = foes.map(f => `«${f.enemy.name}» (рівень ${f.enemy.level})${f.enemy.boss ? " — БОС" : ""}`).join(", ");
+    push({ who: "info", text: `Бій починається: ${heroNames} проти ${foeNames}.` });
 
     let round = 0;
-    let q = 0;
-    const alive = () => state.heroHp > 0 && state.enemyHp > 0;
-
-    while (alive() && round < MAX_ROUNDS) {
+    while (going() && round < MAX_ROUNDS) {
       round++;
-      const h = heroNow(ctx);
-      const heroFirst = h.speed >= enemy.stats.speed;
-      const heroExtra = extraHitChance(h.speed, enemy.stats.speed);
-      const enemyExtra = extraHitChance(enemy.stats.speed, h.speed);
-      const turns = heroFirst ? ["hero", "enemy"] : ["enemy", "hero"];
-      for (const t of turns) {
-        if (!alive()) break;
-        if (t === "hero") {
-          push(heroAction(queue[q++ % queue.length], ctx, false));
-          if (alive() && Math.random() < heroExtra) push(heroAction(queue[q++ % queue.length], ctx, true));
+      // Порядок ходів за швидкістю (при рівності — герої першими)
+      const order = [...heroes, ...foes].filter(u => u.hp > 0)
+        .map(u => ({ u, hero: !!u.base, speed: speedOf(u) }))
+        .sort((a, b) => b.speed - a.speed || (b.hero - a.hero));
+      for (const { u, hero } of order) {
+        if (!going()) break;
+        if (u.hp <= 0) continue;
+        if (hero) {
+          const target = aliveE()[0];                         // група б'є першого живого ворога
+          const ctx = pair(u, target);
+          push(heroTurn(ctx, u.queue, u.qRef, false));
+          if (target.hp > 0 && Math.random() < extraHitChance(heroNow(ctx).speed, target.enemy.stats.speed)) {
+            push(heroTurn(ctx, u.queue, u.qRef, true));
+          }
+          if (target.hp <= 0 && foes.length > 1) push({ who: "info", text: `«${target.enemy.name}» переможений.` });
         } else {
-          if (state.dot && state.dot.turns > 0) {
-            state.enemyHp = Math.max(0, state.enemyHp - state.dot.dmg);
-            state.dot.turns--;
-            push({ who: "hero", text: `Отрута: ${state.dot.dmg} шкоди «${enemy.name}»`, crit: false });
-            if (!alive()) break;
+          const targets = aliveH();
+          const H = targets[Math.floor(Math.random() * targets.length)];   // ворог б'є випадкового героя
+          const ctx = pair(H, u);
+          if (u.dot && u.dot.turns > 0) {
+            u.hp = Math.max(0, u.hp - u.dot.dmg);
+            u.dot.turns--;
+            push({ who: "hero", text: `Отрута: ${u.dot.dmg} шкоди «${u.enemy.name}»`, crit: false });
+            if (u.hp <= 0) { if (foes.length > 1) push({ who: "info", text: `«${u.enemy.name}» переможений.` }); continue; }
           }
           push(enemyAction(ctx, false));
-          if (alive() && Math.random() < enemyExtra) push(enemyAction(ctx, true));
+          if (H.hp > 0 && Math.random() < extraHitChance(u.enemy.stats.speed, heroNow(ctx).speed)) push(enemyAction(ctx, true));
+          if (H.hp <= 0 && heroes.length > 1 && aliveH().length) push({ who: "info", text: `${H.name} падає без сил…` });
         }
       }
       // Кінець раунду — бафи й послаблення слабшають
-      for (const [id, b] of Object.entries(state.buffs)) {
-        if (--b.turns <= 0) {
-          delete state.buffs[id];
-          if (alive()) push({ who: "info", text: `Дія «${RPG.SKILLS[id].name}» закінчилась.` });
+      for (const h of heroes) {
+        for (const [id, b] of Object.entries(h.buffs)) {
+          if (--b.turns <= 0) {
+            delete h.buffs[id];
+            if (going() && h.hp > 0) push({ who: "info", text: `${heroes.length > 1 ? h.name + ": " : ""}дія «${RPG.SKILLS[id].name}» закінчилась.` });
+          }
         }
       }
-      if (state.enemyAtkDown.turns > 0) state.enemyAtkDown.turns--;
+      for (const f of foes) if (f.atkDown.turns > 0) f.atkDown.turns--;
     }
 
-    const win = state.enemyHp <= 0;
-    const draw = !win && state.heroHp > 0;
-    if (win) push({ who: "info", text: `«${enemy.name}» переможений за ${round} раунд(ів).` });
-    else if (draw) push({ who: "info", text: `«${enemy.name}» втік із бою.` });
-    else push({ who: "info", text: `${ctx.heroName} загинув…` });
+    const win = aliveE().length === 0;
+    const draw = !win && aliveH().length > 0;
+    const many = foes.length > 1;
+    if (win) push({ who: "info", text: `${many ? "Усіх ворогів" : `«${foes[0].enemy.name}»`} переможено за ${round} раунд(ів).` });
+    else if (draw) push({ who: "info", text: `${many ? "Вороги втекли" : `«${foes[0].enemy.name}» втік`} із бою.` });
+    else push({ who: "info", text: heroes.length > 1 ? "Уся група загинула…" : `${heroes[0].name} загинув…` });
 
-    return { win, draw, rounds: round, heroHp: state.heroHp, heroMp: state.heroMp, events, enemyId, enemyIds: [enemyId], champion };
+    return {
+      win, draw, rounds: round, events,
+      heroes: heroes.map(h => ({ hp: h.hp, mp: h.mp, dead: h.hp <= 0 })),
+      enemies: foes.map(f => ({ id: f.id, champion: f.champion, name: f.enemy.name, exp: f.enemy.exp })),
+      enemyIds: foes.map(f => f.id),
+      heroHp: heroes[0].hp, heroMp: heroes[0].mp,
+      champion: foes.some(f => f.champion)
+    };
   }
 
-  Object.assign(RPG, { simulateBattle });
+  // Бій одного героя з одним ворогом (як раніше)
+  // champion = true — бій з чемпіоном (показники ×3, див. data/enemies.js)
+  function simulateBattle(save, enemyId, champion = false) {
+    const r = simulatePartyBattle([save], [{ id: enemyId, champion }]);
+    return Object.assign(r, { enemyId });
+  }
+
+  // Скільки ворогів може вийти проти групи (рішення 3б):
+  // максимум = розмір групи × (середній рівень групи / рівень головного героя),
+  // від 1 до розміру групи. Новачки 1 рівня «стримують натовп», а коли
+  // підростуть до рівня лідера — ворогів може бути стільки ж, скільки героїв.
+  function enemyGroupCap(members) {
+    const n = Math.max(1, members.length);
+    if (n === 1) return 1;
+    const leader = Math.max(1, members[0].character.level || 1);
+    const avg = members.reduce((s, ms) => s + (ms.character.level || 1), 0) / n;
+    return Math.max(1, Math.min(n, Math.round(n * Math.min(1, avg / leader))));
+  }
+
+  // Ворогів у бою: від 1 до groupSize (випадково), бос — не більше одного.
+  function rollEnemyGroup(locationId, heroLevel, groupSize) {
+    const n = 1 + Math.floor(Math.random() * Math.max(1, groupSize));
+    const specs = [];
+    let boss = false;
+    for (let i = 0; i < n; i++) {
+      let id = RPG.pickEnemy(locationId, heroLevel);
+      for (let tries = 0; boss && RPG.ENEMIES[id]?.boss && tries < 20; tries++) id = RPG.pickEnemy(locationId, heroLevel);
+      if (RPG.ENEMIES[id]?.boss) { if (boss) continue; boss = true; }
+      specs.push({ id, champion: RPG.rollChampion(id) });
+    }
+    return specs;
+  }
+
+  Object.assign(RPG, { simulateBattle, simulatePartyBattle, rollEnemyGroup, enemyGroupCap });
 })(window.RPG);

@@ -31,7 +31,7 @@
       <!-- ЛІВА КОЛОНКА: персонаж -->
       <section class="col" aria-label="Персонаж">
         <figure class="pic portrait">
-          <img id="hero-img" src="../assets/images/hero_1_farm_sunset.webp" alt="Персонаж" width="600" height="900">
+          <span id="hero-img" class="hero-sprite" role="img" aria-label="Персонаж"></span>
           <figcaption id="hero-name">Персонаж</figcaption>
         </figure>
         <div class="stats">
@@ -43,6 +43,8 @@
           </div>
         </div>
         <div class="note" id="regen-info"></div>
+        <!-- Напарники групи (game.js → renderPartyList) -->
+        <div class="party-list" id="party-list" hidden></div>
 
         <div class="inv-head">
           <span>Швидкий доступ</span>
@@ -70,6 +72,8 @@
 
           <ol class="log" id="battle-log" aria-label="Журнал бою"></ol>
 
+          <!-- Чию чергу дій налаштовуємо (якщо в групі кілька героїв) -->
+          <div class="row member-tabs" id="queue-member" hidden></div>
           <div class="queue-head">
             <span>Черга дій (повторюється, поки триває бій)</span>
             <span id="weapon-info"></span>
@@ -89,13 +93,15 @@
       <!-- ПРАВА КОЛОНКА: ворог (лише в бойових локаціях) -->
       <section class="col" aria-label="Ворог" id="enemy-col" hidden>
         <figure class="pic portrait">
-          <img id="enemy-img" src="../assets/images/enemy_rat_1_barn_cellar.webp" alt="Ворог" width="600" height="900">
+          <span id="enemy-img" class="hero-sprite" role="img" aria-label="Ворог"></span>
           <figcaption id="enemy-name">Ворог</figcaption>
         </figure>
         <div class="stats">
           <div class="bar bar-hp" id="enemy-hp" data-name="HP"><div class="bar-fill"></div><span class="bar-label">HP</span></div>
           <div class="bar bar-mp" id="enemy-mp" data-name="MP"><div class="bar-fill"></div><span class="bar-label">MP</span></div>
         </div>
+        <!-- Якщо ворогів кілька — список з HP / MP кожного -->
+        <div class="party-list" id="enemy-list" hidden></div>
       </section>
 
     </div>
@@ -112,6 +118,7 @@
   <script src="../assets/js/rarity.js" defer></script>
   <script src="../assets/js/save.js" defer></script>
   <script src="../assets/js/character.js" defer></script>
+  <script src="../assets/js/party.js" defer></script>
   <script src="../assets/js/battle.js" defer></script>
   <script src="../assets/js/game.js" defer></script>
   <script src="../assets/js/menu.js" defer></script>

@@ -15,7 +15,6 @@
 <body data-page="character">
 
   <header>
-    <h1 class="page-title">Персонаж</h1>
     <nav>
       <a class="wf wf-link" href="game.html">Локація</a>
       <a class="wf wf-link" href="character.html" aria-current="page">Персонаж</a>
@@ -27,11 +26,13 @@
   </header>
 
   <main>
+    <!-- Герої групи: атрибути, характеристики й спорядження кожного окремо -->
+    <div class="row member-tabs" id="member-tabs" hidden></div>
     <div class="row">
 
       <section class="stack" style="flex:0 1 300px">
         <figure class="pic">
-          <img id="hero-img" src="../assets/images/hero_1_farm_sunset.webp" alt="Персонаж" width="600" height="900">
+          <span id="hero-img" class="hero-sprite" role="img" aria-label="Персонаж"></span>
           <figcaption id="hero-name">Персонаж</figcaption>
         </figure>
         <div class="stats">
@@ -87,6 +88,7 @@
   <script src="../assets/js/rarity.js" defer></script>
   <script src="../assets/js/save.js" defer></script>
   <script src="../assets/js/character.js" defer></script>
+  <script src="../assets/js/party.js" defer></script>
   <script src="../assets/js/battle.js" defer></script>
   <script src="../assets/js/game.js" defer></script>
   <script src="../assets/js/menu.js" defer></script>

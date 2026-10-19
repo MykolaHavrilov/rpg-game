@@ -7,17 +7,25 @@
 // gold — [мін, макс]
 // loot — chance — шанс від 0 до 1, qty — [мін, макс]
 //        Чим вищий рівень ворога, тим кращі речі та більші зілля.
-// img  — шлях від кореня гри (game_00004)
+// sprite — номер кадру у спрайт-листі ворогів assets/images/ENEMIES_1 (256×256, відступ 2 px)
+// verb  — як ворог б'є (у журналі бою), за замовчуванням «кусає»
+// spell — магічна атака: { name, mp, mult, chance } — сила магії × mult проти маг. захисту,
+//         використовується з шансом chance, якщо вистачає мани
+// skills — унікальні навички (бос): по черзі, кожен 3-й власний хід ворога.
+//          kind: "magic" (шкода), "heal" (лікує healPct від макс. HP), "stun" (шкода + герой пропускає хід)
+// noChampion — не може стати чемпіоном; boss — показується як бос
+// spawnWeight — множник шансу зустрічі (1 — звичайно, 0.1 — у 10 разів рідше)
 // ============================================================
 
 (function (RPG) {
-  const DEFAULT_ENEMY_IMG = "assets/images/enemy_rat_1_barn_cellar.webp";
+  // Спрайт-лист ворогів: 5 стовпців × 2 рядки, кадр 256×256, відступ 2 px
+  const ENEMY_SHEET = { file: "assets/images/ENEMIES_1", ext: ".webp", cols: 5, rows: 2, size: 256, gap: 2 };
 
   const ENEMIES = {
     // ---------- Щури (1–3 рівень) ----------
     rat: {
       name: "Щур з льоху",
-      img: "assets/images/enemy_rat_1_barn_cellar.webp",
+      sprite: 0,
       level: 1,
       stats: { hp: 30, mp: 0, attack: 7, defense: 1, magicDefense: 0, speed: 4, crit: 3 },
       exp: 2,
@@ -31,7 +39,7 @@
     },
     rat2: {
       name: "Щур з поля",
-      img: "assets/images/enemy_rat_2_sewer.webp",
+      sprite: 1,
       level: 2,
       stats: { hp: 45, mp: 0, attack: 10, defense: 2, magicDefense: 1, speed: 5, crit: 4 },
       exp: 6,
@@ -48,7 +56,7 @@
     },
     rat3: {
       name: "Щур з підвалу",
-      img: "assets/images/enemy_rat_3_plague.webp",
+      sprite: 2,
       level: 3,
       stats: { hp: 65, mp: 0, attack: 14, defense: 3, magicDefense: 1, speed: 6, crit: 5 },
       exp: 20,
@@ -70,7 +78,7 @@
     // ---------- Вовки (4–6 рівень) ----------
     wolf: {
       name: "Сірий вовк",
-      img: "assets/images/enemy_wolf_1_forest.webp",
+      sprite: 3,
       level: 4,
       stats: { hp: 110, mp: 0, attack: 20, defense: 5, magicDefense: 2, speed: 8, crit: 6, blockPhys: 3 },
       exp: 40,
@@ -92,7 +100,7 @@
     },
     wolf2: {
       name: "Чорний вовк",
-      img: "assets/images/enemy_wolf_2_moon_howl.webp",
+      sprite: 4,
       level: 5,
       stats: { hp: 150, mp: 0, attack: 26, defense: 7, magicDefense: 3, speed: 9, crit: 8, blockPhys: 4 },
       exp: 60,
@@ -115,7 +123,7 @@
     },
     wolf3: {
       name: "Білий вовк",
-      img: "assets/images/enemy_wolf_3_snow.webp",
+      sprite: 5,
       level: 6,
       stats: { hp: 200, mp: 0, attack: 32, defense: 9, magicDefense: 4, speed: 10, crit: 10, blockPhys: 5 },
       exp: 90,
@@ -136,12 +144,97 @@
         { id: "shield_t2",        chance: 0.002, qty: [1, 1] },
         { id: "potion_magic",     chance: 0.008, qty: [1, 1] }
       ]
+    },
+    // ---------- Слайми (6–8 рівень) та Король слайм (Печера в лісі) ----------
+    slime: {
+      name: "Зелений слайм",
+      sprite: 6, verb: "хлюпає",
+      level: 6,
+      stats: { hp: 170, mp: 40, attack: 22, magic: 26, defense: 7, magicDefense: 10, speed: 7, crit: 4, blockMag: 4 },
+      spell: { name: "Кислотний плювок", mp: 10, mult: 1.3, chance: 0.4 },
+      exp: 100,
+      gold: [10, 22],
+      loot: [
+        { id: "slime_gel",        chance: 0.6, qty: [1, 2] },
+        { id: "potion_mp_small",  chance: 0.12, qty: [1, 1] },
+        { id: "potion_mp_medium", chance: 0.05, qty: [1, 1] },
+        { id: "potion_hp_medium", chance: 0.05, qty: [1, 1] },
+        { id: "slime_ring",       chance: 0.012, qty: [1, 1] },
+        { id: "slime_earring",    chance: 0.01, qty: [1, 1] },
+        { id: "slime_amulet",     chance: 0.008, qty: [1, 1] },
+        { id: "orb_t1",           chance: 0.008, qty: [1, 1] }
+      ]
+    },
+    slime2: {
+      name: "Синій слайм",
+      sprite: 7, verb: "хлюпає",
+      level: 7,
+      stats: { hp: 220, mp: 60, attack: 25, magic: 33, defense: 8, magicDefense: 14, speed: 8, crit: 5, blockMag: 6 },
+      spell: { name: "Крижаний бризок", mp: 12, mult: 1.4, chance: 0.4 },
+      exp: 140,
+      gold: [14, 28],
+      loot: [
+        { id: "slime_gel",        chance: 0.65, qty: [1, 2] },
+        { id: "potion_mp_medium", chance: 0.08, qty: [1, 1] },
+        { id: "potion_hp_medium", chance: 0.06, qty: [1, 1] },
+        { id: "potion_mp_large",  chance: 0.01, qty: [1, 1] },
+        { id: "slime_ring",       chance: 0.015, qty: [1, 1] },
+        { id: "slime_earring",    chance: 0.012, qty: [1, 1] },
+        { id: "slime_amulet",     chance: 0.01, qty: [1, 1] },
+        { id: "staff_t1",         chance: 0.008, qty: [1, 1] }
+      ]
+    },
+    slime3: {
+      name: "Фіолетовий слайм",
+      sprite: 8, verb: "хлюпає",
+      level: 8,
+      stats: { hp: 270, mp: 80, attack: 29, magic: 40, defense: 9, magicDefense: 16, speed: 9, crit: 6, blockMag: 8 },
+      spell: { name: "Отруйна хмара", mp: 15, mult: 1.5, chance: 0.45 },
+      exp: 190,
+      gold: [18, 35],
+      loot: [
+        { id: "slime_gel",        chance: 0.7, qty: [1, 3] },
+        { id: "potion_mp_medium", chance: 0.1, qty: [1, 1] },
+        { id: "potion_hp_large",  chance: 0.015, qty: [1, 1] },
+        { id: "potion_mp_large",  chance: 0.015, qty: [1, 1] },
+        { id: "slime_ring",       chance: 0.018, qty: [1, 1] },
+        { id: "slime_earring",    chance: 0.015, qty: [1, 1] },
+        { id: "slime_amulet",     chance: 0.012, qty: [1, 1] },
+        { id: "orb_t2",           chance: 0.004, qty: [1, 1] },
+        { id: "potion_magic",     chance: 0.008, qty: [1, 1] }
+      ]
+    },
+    slime_king: {
+      name: "Король слайм",
+      sprite: 9, verb: "розчавлює вагою",
+      level: 10,
+      boss: true, noChampion: true, spawnWeight: 0.1,
+      // У 5–6 разів сильніший за зеленого слайма: HP ×6, атака й магія ×1,6
+      stats: { hp: 1020, mp: 300, attack: 35, magic: 42, defense: 14, magicDefense: 20, speed: 8, crit: 8, blockPhys: 5, blockMag: 10 },
+      skills: [
+        { kind: "magic", name: "Золотий потоп", mp: 40, mult: 2.2 },
+        { kind: "heal",  name: "Королівське желе", mp: 50, healPct: 0.12 },
+        { kind: "stun",  name: "Липкі кайдани", mp: 30, mult: 1.0 }
+      ],
+      exp: 1000,
+      gold: [80, 150],
+      loot: [
+        { id: "slime_gel",        chance: 1, qty: [3, 6] },
+        { id: "potion_mp_large",  chance: 0.25, qty: [1, 2] },
+        { id: "potion_hp_large",  chance: 0.2, qty: [1, 1] },
+        { id: "potion_magic",     chance: 0.1, qty: [1, 1] },
+        { id: "slime_ring",       chance: 0.15, qty: [1, 1] },
+        { id: "slime_earring",    chance: 0.15, qty: [1, 1] },
+        { id: "slime_amulet",     chance: 0.12, qty: [1, 1] },
+        { id: "orb_t2",           chance: 0.04, qty: [1, 1] },
+        { id: "staff_t2",         chance: 0.04, qty: [1, 1] }
+      ]
     }
   };
 
   // ---------- Локації ----------
   // type:
-  //   "home"   — Домівка: битися заборонено, сундук, +5% HP/MP кожні 10 с
+  //   "home"   — Домівка: битися заборонено, скриня, +5% HP/MP кожні 10 с
   //   "temple" — Храм: тут відроджуються загиблі, молитва за полеглих у групі
   //   "tavern" — Шинок: торговець (shop — що він продає)
   //   "city"   — Місто з районами (districts); Гільдія авантюристів — у Південному
@@ -153,7 +246,7 @@
     home: {
       name: "Домівка",
       type: "home",
-      description: "Рідна хата. Тут не б'ються: можна перепочити, розібрати речі й сховати цінне в сундук."
+      description: "Рідна хата. Тут не б'ються: можна перепочити, розібрати речі й сховати цінне в скриню."
     },
     temple: {
       name: "Храм",
@@ -180,7 +273,7 @@
     city: {
       name: "Місто",
       type: "city",
-      description: "Мури, дзвони й гамір вулиць. Місто ділиться на райони — поки відкрито лише Південний, де стоїть Гільдія авантюристів.",
+      description: "Мури, дзвони й гамір вулиць. Місто ділиться на райони: у Південному стоїть Гільдія авантюристів, а в Центральному — Мерія з Дошкою оголошень (прохід туди відкриває Гільдія).",
       // Райони міста. locked: true — «Закрито — відкриється згодом»
       districts: [
         { id: "center", name: "Центральний район", building: "Мерія", locked: true,
@@ -205,9 +298,9 @@
     forest_cave: {
       name: "Печера в лісі",
       type: "combat",
-      locked: true,
-      description: "Закрито — відкриється згодом.",
-      enemies: []
+      minLevel: 6,
+      description: "Волога темна печера, де стіни блищать від слизу. Тут живуть зелені, сині й фіолетові слайми, а в глибині, кажуть, сидить сам Король слайм.",
+      enemies: ["slime", "slime2", "slime3", "slime_king"]
     }
   };
   const DEFAULT_LOCATION = "home";
@@ -237,14 +330,16 @@
     drops: [["legendary", 0.05], ["epic", 0.25], ["magic", 0.50]]
   };
 
-  function rollChampion() {
+  // enemyId — якщо ворог не може бути чемпіоном (noChampion, напр. Король слайм), завжди false
+  function rollChampion(enemyId) {
+    if (enemyId && ENEMIES[enemyId]?.noChampion) return false;
     return Math.random() < CHAMPION.chance;
   }
 
   // champion = true — повертає посилену копію ворога
   function getEnemy(id, champion = false) {
     const base = ENEMIES[id];
-    if (!base || !champion) return base || null;
+    if (!base || !champion || base.noChampion) return base || null;
     const stats = { ...base.stats };
     for (const k of CHAMPION.statKeys) if (stats[k]) stats[k] = Math.round(stats[k] * CHAMPION.statMult);
     return { ...base, stats, champion: true, baseName: base.name, name: `Чемпіон: ${base.name}` };
@@ -273,8 +368,10 @@
     };
   }
 
-  function enemyImg(id) {
-    return RPG.asset(ENEMIES[id]?.img || DEFAULT_ENEMY_IMG);
+  // CSS-стиль кадру ворога зі спрайт-листа (для квадратного елемента)
+  function enemySpriteStyle(id) {
+    const sh = ENEMY_SHEET;
+    return RPG.spriteStyle(RPG.asset(sh.file + sh.ext), sh.cols, sh.rows, sh.size, sh.gap, ENEMIES[id]?.sprite ?? 0);
   }
 
   function getLocation(id) {
@@ -312,7 +409,7 @@
   function pickEnemy(locationId, heroLevel = 1) {
     const list = getLocation(locationId).enemies || [];
     if (!list.length) return null;
-    const weights = list.map(id => enemyWeight(ENEMIES[id].level, heroLevel));
+    const weights = list.map(id => enemyWeight(ENEMIES[id].level, heroLevel) * (ENEMIES[id].spawnWeight ?? 1));
     let r = Math.random() * weights.reduce((a, b) => a + b, 0);
     for (let i = 0; i < list.length; i++) {
       r -= weights[i];
@@ -337,6 +434,6 @@
   Object.assign(RPG, {
     ENEMIES, LOCATIONS, DEFAULT_LOCATION, RESPAWN_LOCATION, GUILD_SHOP,
     CHAMPION, rollChampion, rollChampionDrop, championBounty,
-    getEnemy, enemyImg, getLocation, isCombatLocation, canEnterLocation, pickEnemy, rollLoot
+    getEnemy, enemySpriteStyle, getLocation, isCombatLocation, canEnterLocation, pickEnemy, rollLoot
   });
 })(window.RPG);

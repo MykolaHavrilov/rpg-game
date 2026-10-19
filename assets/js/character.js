@@ -1,6 +1,6 @@
 // ============================================================
 // ЛОГІКА ПЕРСОНАЖА: створення, характеристики, досвід,
-// зміна професії, інвентар, сундук, екіпірування, розхідники,
+// зміна професії, інвентар, скриня, екіпірування, розхідники,
 // відновлення HP/MP, загибель, Храм, торгівля.
 // Усі функції змінюють об'єкт save. Після змін викликай saveGame(save).
 // ============================================================
@@ -56,7 +56,7 @@ function createNewSave(name, classId = DEFAULT_CLASS) {
     equipment: {},
     inventory: [],
     lootLuck: RPG.newLuck(),   // прихований лічильник рідкісних речей (rarity.js)
-    chest: [],              // сундук у Домівці — речі не зникають при смерті
+    chest: [],              // скриня в Домівці — речі не зникають при смерті
     battleQueue: ["attack"],   // черга дій у бою (до 10)
     location: { map: cls.startLocation, page: "game" },
     settings: { battleView: "stepByStep" }   // або "result"
@@ -129,6 +129,14 @@ function calcStats(save) {
   if (stats.attackSpeedPct) stats.speed *= 1 + stats.attackSpeedPct / 100;
   stats.speed = Math.min(stats.speed, CAP.speed * 2);
 
+  // Бонуси комплектів (data/items.js → ITEM_SETS), поверх усього іншого
+  const setCounts = RPG.equippedSetCounts ? RPG.equippedSetCounts(save) : {};
+  for (const [setId, n] of Object.entries(setCounts)) {
+    const set = RPG.ITEM_SETS[setId];
+    if (!set || n < set.pieces) continue;
+    for (const [key, pct] of Object.entries(set.bonusPct || {})) stats[key] = (stats[key] || 0) * (1 + pct / 100);
+  }
+
   for (const key in stats) {
     stats[key] = DECIMAL_KEYS.includes(key)
       ? Math.round(stats[key] * 10) / 10
@@ -181,7 +189,7 @@ function applyRegen(save, now = Date.now()) {
   const s = calcStats(save);
   const per = regenPerTick(save);
   const beforeHp = ch.hp, beforeMp = ch.mp;
-  if (ch.hp > 0) {   // мертвих не лікує (для майбутньої групи)
+  if (ch.hp > 0 && !ch.dead) {   // полеглих не лікує — їх відроджує молитва в Храмі
     ch.hp = Math.min(s.hp, ch.hp + per.hp * ticks);
     ch.mp = Math.min(s.mp, ch.mp + per.mp * ticks);
   }
@@ -226,10 +234,10 @@ function addExp(save, amount) {
 function removeExp(save, amount) {
   const ch = save.character;
   const table = getClass(ch.classId).levelTable;
-  const floor = expForLevel(table, ch.level);
+  const floor = Math.min(expForLevel(table, ch.level), ch.exp);   // нижче поточного не опускаємо
   const before = ch.exp;
   ch.exp = Math.max(floor, ch.exp - Math.floor(amount));
-  return before - ch.exp;
+  return Math.max(0, before - ch.exp);
 }
 
 // Дані для смужки досвіду
@@ -278,9 +286,9 @@ function applyDeath(save, enemyIds) {
 
   ch.deaths = (ch.deaths || 0) + 1;
 
-  // Герой поки один, тож одразу відроджується в Храмі.
-  // Коли з'явиться група: якщо хтось вижив — полеглі лишаються мертвими,
-  // а живі мають дійти до Храму й помолитися (див. pray()).
+  // Уся група загинула — кожен відроджується в Храмі.
+  // (Якщо хтось вижив, полеглі лишаються мертвими — див. markFallen() і pray().)
+  ch.dead = false;
   const s = calcStats(save);
   ch.hp = Math.max(1, Math.ceil(s.hp * RESPAWN_HP_PCT));
   ch.mp = Math.floor(s.mp * RESPAWN_MP_PCT);
@@ -290,20 +298,31 @@ function applyDeath(save, enemyIds) {
   return { penalty, expLost, lostItems, itemLossLimit: limit };
 }
 
+// Герой упав у бою, але група перемогла: лишається полеглим (0 HP), поки
+// живі не помоляться за нього в Храмі. ms — «вигляд» героя (party.js → memberSave)
+function markFallen(ms) {
+  ms.character.hp = 0;
+  ms.character.mp = 0;
+  ms.character.dead = true;
+  ms.character.deaths = (ms.character.deaths || 0) + 1;
+}
+
 // ---------- Храм: молитва за полеглих ----------
-// Для групи персонажів (майбутнє): save.party — масив учасників
-// { name, dead, hp, mp, maxHp, maxMp }. Полеглі відроджуються з 10% HP і 0% MP.
+// Полеглі герої групи відроджуються з 10% HP і 0% MP.
 function pray(save) {
   if (RPG.getLocation(save.location.map).type !== "temple") {
     return { ok: false, reason: "Помолитися можна лише в Храмі." };
   }
-  const fallen = (save.party || []).filter(m => m.dead);
-  for (const m of fallen) {
-    m.dead = false;
-    m.hp = Math.max(1, Math.ceil((m.maxHp || 1) * RESPAWN_HP_PCT));
-    m.mp = Math.floor((m.maxMp || 0) * RESPAWN_MP_PCT);
+  const members = RPG.partyMembers ? RPG.partyMembers(save) : [save];
+  const fallen = members.filter(ms => ms.character.dead || ms.character.hp <= 0);
+  for (const ms of fallen) {
+    const s = calcStats(ms);
+    ms.character.dead = false;
+    ms.character.hp = Math.max(1, Math.ceil(s.hp * RESPAWN_HP_PCT));
+    ms.character.mp = Math.floor(s.mp * RESPAWN_MP_PCT);
+    ms.character.regenAt = Date.now();
   }
-  return { ok: true, revived: fallen.map(m => m.name) };
+  return { ok: true, revived: fallen.map(ms => ms.character.name) };
 }
 
 // ---------- Зміна професії ----------
@@ -339,7 +358,7 @@ function changeClass(save, newClassId) {
   return { ok: true, removed, changeBonus: { ...(CLASSES[newClassId].changeBonus || {}) } };
 }
 
-// ---------- Списки предметів (інвентар, сундук) ----------
+// ---------- Списки предметів (інвентар, скриня) ----------
 // Обидва — масиви [{ id, qty }]
 
 function countInList(list, id) {
@@ -404,7 +423,7 @@ function countItem(save, id)          { return countInList(save.inventory, id); 
 function addItem(save, id, qty = 1)    { return addToList(save.inventory, id, qty); }
 function removeItem(save, id, qty = 1) { return removeFromList(save.inventory, id, qty); }
 
-// ---------- Сундук (лише в Домівці) ----------
+// ---------- Скриня (лише в Домівці) ----------
 // Переносить усю стопку з однієї клітинки.
 
 function isAtHome(save) {
@@ -412,7 +431,7 @@ function isAtHome(save) {
 }
 
 function moveToChest(save, invIndex) {
-  if (!isAtHome(save)) return { ok: false, reason: "Сундук стоїть у Домівці." };
+  if (!isAtHome(save)) return { ok: false, reason: "Скриня стоїть у Домівці." };
   const entry = save.inventory[invIndex];
   if (!entry) return { ok: false, reason: "Порожня клітинка." };
   save.inventory.splice(invIndex, 1);
@@ -421,7 +440,7 @@ function moveToChest(save, invIndex) {
 }
 
 function takeFromChest(save, chestIndex) {
-  if (!isAtHome(save)) return { ok: false, reason: "Сундук стоїть у Домівці." };
+  if (!isAtHome(save)) return { ok: false, reason: "Скриня стоїть у Домівці." };
   const entry = save.chest[chestIndex];
   if (!entry) return { ok: false, reason: "Порожня клітинка." };
   save.chest.splice(chestIndex, 1);
@@ -449,15 +468,27 @@ function canEquip(save, id) {
       return { ok: false, reason: `Потрібно: ${RPG.WEAPON_TYPES[item.weaponType].mastery.toLowerCase()} ${need} (зараз ${have}).` };
     }
   }
-  // Лук — дворучний: у лівій руці лише колчан; колчан — лише з луком
-  const main = ITEMS[RPG.refId(save.equipment.mainHand)];
-  if (item.offType === "quiver" && main?.weaponType !== "bow") {
-    return { ok: false, reason: "Колчан можна вдягнути лише разом з луком." };
-  }
-  if (item.slot === "offHand" && item.offType !== "quiver" && main?.weaponType === "bow") {
-    return { ok: false, reason: "Лук тримають двома руками: у лівій руці можна мати лише колчан." };
+  // Ліва рука: що можна тримати, залежить від зброї в правій (OFFHAND_RULES у data/items.js)
+  if (item.slot === "offHand") {
+    const mainType = ITEMS[RPG.refId(save.equipment.mainHand)]?.weaponType || "none";
+    if (!RPG.offHandAllowed(mainType, item.offType)) {
+      return { ok: false, reason: RPG.offHandRuleText(mainType) };
+    }
   }
   return { ok: true };
+}
+
+// Якщо річ у лівій руці не пасує до зброї в правій — знімає її в інвентар.
+// Повертає зняту річ або null.
+function fixHands(save) {
+  const off = save.equipment.offHand;
+  if (!off) return null;
+  const mainType = ITEMS[RPG.refId(save.equipment.mainHand)]?.weaponType || "none";
+  const offType = ITEMS[RPG.refId(off)]?.offType;
+  if (RPG.offHandAllowed(mainType, offType)) return null;
+  delete save.equipment.offHand;
+  addRefToList(save.inventory, off);
+  return off;
 }
 
 // У який слот персонажа піде річ (кільця/сережки — у вільний з двох)
@@ -486,18 +517,10 @@ function equipItem(save, what) {
   if (old) save.inventory.splice(index, 0, RPG.normalizeRef(old));  // знята річ — у ту ж клітинку
   save.equipment[slot] = RPG.normalizeRef(entry);
 
-  // Лук ↔ ліва рука: лук лише з колчаном, колчан лише з луком
+  // Нова зброя в правій руці — річ у лівій, що до неї не пасує, знімається в інвентар
   const removed = [];
-  const off = save.equipment.offHand;
-  if (off) {
-    const isBow = ITEMS[RPG.refId(save.equipment.mainHand)]?.weaponType === "bow";
-    const isQuiver = ITEMS[RPG.refId(off)]?.offType === "quiver";
-    if (isBow !== isQuiver) {
-      delete save.equipment.offHand;
-      addRefToList(save.inventory, off);
-      removed.push(off);
-    }
-  }
+  const off = fixHands(save);
+  if (off) removed.push(off);
   clampHpMp(save);
   return { ok: true, replaced: old || null, ref: entry, slot, removed };
 }
@@ -507,12 +530,7 @@ function unequipItem(save, slot) {
   if (!ref) return { ok: false, reason: "Слот порожній." };
   delete save.equipment[slot];
   addRefToList(save.inventory, ref);
-  // Без лука колчан у лівій руці не тримається
-  const off = save.equipment.offHand;
-  if (slot === "mainHand" && off && ITEMS[RPG.refId(off)]?.offType === "quiver") {
-    delete save.equipment.offHand;
-    addRefToList(save.inventory, off);
-  }
+  fixHands(save);   // з вільною правою рукою ліва може тримати будь-що, але перевіряємо про всяк випадок
   clampHpMp(save);
   return { ok: true, ref };
 }
@@ -624,11 +642,11 @@ Object.assign(RPG, {
   REGEN_TICK_MS, HOME_REGEN_PCT, RESPAWN_HP_PCT, DEATH_EXP_MULT, ITEM_LOSS_CHANCE, maxItemLoss,
   createNewSave, calcStats, clampHpMp, fullHeal,
   regenPerTick, applyRegen, msToNextRegen,
-  addExp, removeExp, expProgress, applyDeath, pray,
+  addExp, removeExp, expProgress, applyDeath, markFallen, pray,
   getClassChanges, changeClass,
   countInList, addToList, addRefToList, removeFromList, countItem, addItem, removeItem,
   isAtHome, moveToChest, takeFromChest,
-  canEquip, equipSlotFor, equipItem, unequipItem, previewEquip, useItem,
+  canEquip, fixHands, equipSlotFor, equipItem, unequipItem, previewEquip, useItem,
   currentShop, buyItem, sellItem, applyReward
 });
 })(window.RPG);

@@ -12,7 +12,7 @@
   const STORE = "saves";
   const LS_PREFIX = "rpg_save_"; // запасне сховище в localStorage
 
-  const SAVE_VERSION = 4;        // версія ФОРМАТУ сейву (полів усередині)
+  const SAVE_VERSION = 5;        // версія ФОРМАТУ сейву (полів усередині)
   const CURRENT_SLOT_KEY = "rpg_current_slot";
 
   // ---------- Відкриття бази ----------
@@ -83,6 +83,8 @@
   // ---------- Основні операції ----------
 
   async function saveGame(save) {
+    // «Вигляд» героя групи (party.js → memberSave) — зберігаємо справжній спільний сейв
+    while (save && save.memberIndex && Object.getPrototypeOf(save) !== Object.prototype) save = Object.getPrototypeOf(save);
     save.savedAt = Date.now();
     save.saveVersion = SAVE_VERSION;
     // зберігаємо «чисту» копію, без посилань на щось стороннє
@@ -188,7 +190,7 @@
     save.battleQueue ??= ["attack"];
     if (!save.battleQueue.length) save.battleQueue = ["attack"];
 
-    // Версія 2: атрибути, вільні очки, відновлення з часом, сундук, смерті
+    // Версія 2: атрибути, вільні очки, відновлення з часом, скриня, смерті
     if ((save.saveVersion || 1) < 2) {
       const cls = RPG.getClass(save.character.classId);
       save.character.attrs ??= { ...cls.baseAttrs };
@@ -228,6 +230,28 @@
     }
     save.inventory = compactStacks(save.inventory.filter(entry => ITEMS[entry.id] && entry.qty > 0));
     save.chest = compactStacks(save.chest.filter(entry => ITEMS[entry.id] && entry.qty > 0));
+
+    // Версія 5: група героїв (save.party), сюжет (save.story: «Час дослідити», дошка оголошень)
+    save.party = (Array.isArray(save.party) ? save.party : []).filter(m => m && m.character && m.equipment);
+    save.story ??= {};
+    for (const m of save.party) {
+      const ch = m.character;
+      ch.classId = RPG.CLASSES[ch.classId] ? ch.classId : RPG.DEFAULT_CLASS;
+      ch.level ??= 1; ch.exp ??= 0; ch.totalExp ??= ch.exp; ch.classHistory ??= [];
+      ch.attrs ??= { ...RPG.getClass(ch.classId).baseAttrs };
+      ch.freePoints ??= 0; ch.kills ??= 0; ch.deaths ??= 0; ch.regenAt ??= Date.now();
+      ch.mastery ??= {}; ch.skills ??= {};
+      delete ch.gold;                                  // золото групи спільне
+      for (const slot in m.equipment) {
+        m.equipment[slot] = RPG.normalizeRef(renameRef(m.equipment[slot]));
+        if (!ITEMS[m.equipment[slot]?.id] || !RPG.SLOTS[slot]) delete m.equipment[slot];
+      }
+      m.battleQueue = Array.isArray(m.battleQueue) && m.battleQueue.length ? m.battleQueue : ["attack"];
+      if (typeof ch.hp !== "number" || typeof ch.mp !== "number") {
+        const st = RPG.calcStats({ ...save, character: ch, equipment: m.equipment });
+        ch.hp = st.hp; ch.mp = st.mp;
+      }
+    }
 
     // HP/MP мають бути числами (у старих сейвах могло бути 0 «до підрахунку»)
     if (typeof save.character.hp !== "number" || typeof save.character.mp !== "number") {
