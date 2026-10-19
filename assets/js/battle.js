@@ -193,8 +193,9 @@
 
   // Повертає { win, draw, rounds, heroHp, heroMp, events, enemyId, enemyIds }
   // кожна подія: { who, text, heroHp, heroMp, enemyHp, crit }
-  function simulateBattle(save, enemyId) {
-    const enemy = RPG.getEnemy(enemyId);
+  // champion = true — бій з чемпіоном (показники ×3, див. data/enemies.js)
+  function simulateBattle(save, enemyId, champion = false) {
+    const enemy = RPG.getEnemy(enemyId, champion);
     const base = RPG.calcStats(save);
     const queue = (save.battleQueue || []).filter(Boolean).slice(0, 10);
     if (!queue.length) queue.push("attack");
@@ -260,7 +261,7 @@
     else if (draw) push({ who: "info", text: `«${enemy.name}» втік із бою.` });
     else push({ who: "info", text: `${ctx.heroName} загинув…` });
 
-    return { win, draw, rounds: round, heroHp: state.heroHp, heroMp: state.heroMp, events, enemyId, enemyIds: [enemyId] };
+    return { win, draw, rounds: round, heroHp: state.heroHp, heroMp: state.heroMp, events, enemyId, enemyIds: [enemyId], champion };
   }
 
   Object.assign(RPG, { simulateBattle });

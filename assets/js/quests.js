@@ -37,6 +37,7 @@
     q.active ??= [];
     q.done ??= 0;
     q.nextId ??= 1;
+    q.bounties ??= [];      // нагороди за переможених чемпіонів (забрати в Адміністратора)
     return q;
   }
 
@@ -139,7 +140,27 @@
     return lines;
   }
 
+  // ---------- Нагороди за чемпіонів ----------
+  function addChampionBounty(save, enemyId) {
+    const q = state(save);
+    const b = RPG.championBounty(enemyId);
+    const bounty = { id: "b" + q.nextId++, enemyId, name: RPG.ENEMIES[enemyId]?.name || enemyId, exp: b.exp, gold: b.gold };
+    q.bounties.push(bounty);
+    return bounty;
+  }
+
+  function claimBounty(save, bountyId) {
+    const q = state(save);
+    const i = q.bounties.findIndex(b => b.id === bountyId);
+    if (i < 0) return { ok: false, reason: "Нагороди немає." };
+    const [b] = q.bounties.splice(i, 1);
+    save.character.gold += b.gold;
+    const levelUps = RPG.addExp(save, b.exp);
+    return { ok: true, bounty: b, levelUps };
+  }
+
   Object.assign(RPG, {
+    addChampionBounty, claimBounty,
     QUEST_MAX_ACTIVE: MAX_ACTIVE,
     questState: state, fillOffers, questTitle, questProgress, isQuestComplete: isComplete,
     describeReward, acceptQuest, abandonQuest, turnInQuest, questOnKill

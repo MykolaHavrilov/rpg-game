@@ -222,8 +222,55 @@
   ];
   const RESPAWN_LOCATION = "temple";
 
-  function getEnemy(id) {
-    return ENEMIES[id] || null;
+  // ---------- Чемпіони ----------
+  // З шансом 0,1% замість звичайного ворога з'являється чемпіон (золота рамка):
+  //   показники ×3 (здоров'я, мана, атака, магія, захист, маг. захист;
+  //   відсоткові шанси і швидкість — як у звичайного),
+  //   Гільдія авантюристів платить за нього нагороду ×5 (досвід і золото ворога),
+  //   з нього випадає ОДНА річ: спершу перевірка легендарної (5%), якщо ні —
+  //   епічної (25%), якщо ні — магічної (50%).
+  const CHAMPION = {
+    chance: 0.001,
+    statMult: 3,
+    bountyMult: 5,
+    statKeys: ["hp", "mp", "attack", "magic", "defense", "magicDefense"],
+    drops: [["legendary", 0.05], ["epic", 0.25], ["magic", 0.50]]
+  };
+
+  function rollChampion() {
+    return Math.random() < CHAMPION.chance;
+  }
+
+  // champion = true — повертає посилену копію ворога
+  function getEnemy(id, champion = false) {
+    const base = ENEMIES[id];
+    if (!base || !champion) return base || null;
+    const stats = { ...base.stats };
+    for (const k of CHAMPION.statKeys) if (stats[k]) stats[k] = Math.round(stats[k] * CHAMPION.statMult);
+    return { ...base, stats, champion: true, baseName: base.name, name: `Чемпіон: ${base.name}` };
+  }
+
+  // Трофей чемпіона: { id, r } або null. Річ береться зі здобичі цього ворога
+  // (зброя/броня/біжутерія), а якщо такої немає — будь-яка річ 1 виду.
+  function rollChampionDrop(enemyId) {
+    let r = null;
+    for (const [rarity, chance] of CHAMPION.drops) {
+      if (Math.random() < chance) { r = rarity; break; }
+    }
+    if (!r) return null;
+    let pool = (ENEMIES[enemyId]?.loot || []).map(d => d.id).filter(id => RPG.hasRarity(id));
+    if (!pool.length) pool = Object.keys(RPG.ITEMS).filter(id => RPG.hasRarity(id) && RPG.ITEMS[id].tier === 1);
+    return { id: pool[Math.floor(Math.random() * pool.length)], r };
+  }
+
+  // Нагорода гільдії за чемпіона: ×5 від досвіду та середнього золота ворога
+  function championBounty(enemyId) {
+    const e = ENEMIES[enemyId];
+    if (!e) return { exp: 0, gold: 0 };
+    return {
+      exp: e.exp * CHAMPION.bountyMult,
+      gold: Math.round((e.gold[0] + e.gold[1]) / 2 * CHAMPION.bountyMult)
+    };
   }
 
   function enemyImg(id) {
@@ -289,6 +336,7 @@
 
   Object.assign(RPG, {
     ENEMIES, LOCATIONS, DEFAULT_LOCATION, RESPAWN_LOCATION, GUILD_SHOP,
+    CHAMPION, rollChampion, rollChampionDrop, championBounty,
     getEnemy, enemyImg, getLocation, isCombatLocation, canEnterLocation, pickEnemy, rollLoot
   });
 })(window.RPG);

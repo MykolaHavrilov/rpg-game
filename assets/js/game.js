@@ -637,6 +637,24 @@
       box.append(el("p", null,
         `«Роботи вистачає — беріть до ${RPG.QUEST_MAX_ACTIVE} завдань одночасно.» Виконано завдань: ${qs.done}.`));
 
+      if (qs.bounties.length) {
+        box.append(el("h3", null, "Нагороди за чемпіонів"));
+        for (const bounty of qs.bounties) {
+          const r = el("div", "shop-row quest-row quest-done champion-row");
+          const info = el("span", "shop-name", `Переможено чемпіона: ${bounty.name}`);
+          info.append(el("small", null, ` · ${bounty.exp} EXP, ${bounty.gold} золота (×${RPG.CHAMPION.bountyMult})`));
+          r.append(info, button("Отримати", "wf wf-button", async () => {
+            const res = RPG.claimBounty(save, bounty.id);
+            if (!res.ok) { showMsg(msg, res.reason, true); return; }
+            await RPG.saveGame(save);
+            showMsg(msg, `Нагорода за чемпіона: +${bounty.exp} EXP, +${bounty.gold} золота.` +
+              (res.levelUps.length ? ` Новий рівень: ${res.levelUps[res.levelUps.length - 1]}!` : ""));
+            renderAll();
+          }));
+          box.append(r);
+        }
+      }
+
       box.append(el("h3", null, "Ваші завдання"));
       if (!qs.active.length) box.append(el("p", "note", "Немає взятих завдань."));
       for (const quest of qs.active) {
@@ -756,10 +774,19 @@
     const saveBtn = $("save-btn");
     const logBox = $("battle-log");
     const arena = $("arena");
-    let enemyId = combat ? RPG.pickEnemy(locId, save.character.level) : null;
+    let enemyId = null;
+    let champion = false;       // чемпіон: золота рамка, показники ×3
+    function nextEnemy() {
+      enemyId = RPG.pickEnemy(locId, save.character.level);
+      champion = RPG.rollChampion();
+    }
+    function curEnemy() { return RPG.getEnemy(enemyId, champion); }
+    if (combat) nextEnemy();
 
     function renderEnemy(hp) {
-      const enemy = RPG.getEnemy(enemyId);
+      const enemy = curEnemy();
+      $("enemy-img").closest("figure").classList.toggle("is-champion", champion);
+      $("enemy-col").classList.toggle("is-champion", champion);
       $("enemy-img").src = RPG.enemyImg(enemyId);
       $("enemy-img").alt = enemy.name;
       $("enemy-name").textContent = `${enemy.name} (рівень ${enemy.level})`;
@@ -829,10 +856,12 @@
     }
 
     function showReady() {
-      const e = RPG.getEnemy(enemyId);
+      const e = curEnemy();
       const warn = e.level >= save.character.level + 2 ? " Обережно: він значно сильніший!" : "";
-      setArena("Готові до бою", [`Попереду: ${e.name} (рівень ${e.level}).${warn}`,
-        "Натисніть «Почати бій» або пошукайте іншого суперника."]);
+      const lines = [`Попереду: ${e.name} (рівень ${e.level}).${warn}`];
+      if (champion) lines.push("Це рідкісний ЧЕМПІОН: утричі сильніший! За перемогу — трофей і нагорода ×5 у Гільдії авантюристів.");
+      lines.push("Натисніть «Почати бій» або пошукайте іншого суперника.");
+      setArena(champion ? "Чемпіон!" : "Готові до бою", lines);
     }
 
     function addLogLine(ev) {
@@ -859,12 +888,12 @@
       if (fighting) return;
       setFighting(true);
 
-      const enemy = RPG.getEnemy(enemyId);
+      const enemy = curEnemy();
       renderEnemy(enemy.stats.hp);
       logBox.innerHTML = "";
 
       const maxStats = RPG.calcStats(save);
-      const result = RPG.simulateBattle(save, enemyId);
+      const result = RPG.simulateBattle(save, enemyId, champion);
 
       // Результат застосовуємо і зберігаємо ОДРАЗУ — щоб не можна було
       // уникнути поразки, просто закривши сторінку під час показу бою
@@ -883,6 +912,19 @@
         for (const it of loot.items) {
           if (it.refs) it.refs.forEach(ref => summary.push(RPG.itemFullName(ref)));
           else summary.push(`${RPG.ITEMS[it.id].name} ×${it.qty}`);
+        }
+        if (champion) {
+          // Трофей чемпіона: одна річ (легендарна 5% → епічна 25% → магічна 50%)
+          const drop = RPG.rollChampionDrop(enemyId);
+          if (drop) {
+            const ref = RPG.makeItem(drop.id, drop.r);
+            save.inventory.push(ref);
+            summary.push(`Трофей чемпіона: ${RPG.itemFullName(ref)}`);
+          } else {
+            summary.push("Трофей чемпіона: цього разу нічого");
+          }
+          const b = RPG.addChampionBounty(save, enemyId);
+          summary.push(`Гільдія авантюристів заплатить ${b.exp} EXP і ${b.gold} золота (нагорода ×5)`);
         }
       } else if (!result.draw) {
         death = RPG.applyDeath(save, result.enemyIds);
@@ -941,9 +983,10 @@
       }
 
       // Наступний суперник
-      enemyId = RPG.pickEnemy(locId, save.character.level);
-      const next = RPG.getEnemy(enemyId);
-      arena.append(el("div", "arena-line", `Далі на вас чекає: ${next.name} (рівень ${next.level}).`));
+      nextEnemy();
+      const next = curEnemy();
+      arena.append(el("div", "arena-line", `Далі на вас чекає: ${next.name} (рівень ${next.level}).` +
+        (champion ? " Це рідкісний ЧЕМПІОН!" : "")));
       renderEnemy(next.stats.hp);
 
       renderAll();
@@ -970,11 +1013,11 @@
       startBtn.addEventListener("click", startBattle);
       rerollBtn.addEventListener("click", () => {
         if (fighting) return;
-        enemyId = RPG.pickEnemy(locId, save.character.level);
-        renderEnemy(RPG.getEnemy(enemyId).stats.hp);
+        nextEnemy();
+        renderEnemy(curEnemy().stats.hp);
         showReady();
       });
-      renderEnemy(RPG.getEnemy(enemyId).stats.hp);
+      renderEnemy(curEnemy().stats.hp);
       showReady();
     }
 

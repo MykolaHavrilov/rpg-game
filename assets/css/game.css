@@ -311,3 +311,16 @@
 @media (prefers-reduced-motion: reduce) {
   .map-hero, .map-hero svg { transition: none; animation: none; }
 }
+
+/* ---------- Чемпіон: золота рамка ---------- */
+figure.is-champion {
+  box-shadow: 0 0 0 3px #f2c14e, 0 0 18px 4px rgba(242, 193, 78, .65);
+  animation: champion-glow 1.8s ease-in-out infinite;
+}
+figure.is-champion figcaption { color: #ffd76a; font-weight: 700; }
+#enemy-col.is-champion .bar-hp { box-shadow: 0 0 0 2px #f2c14e; }
+.champion-row { box-shadow: inset 3px 0 0 #f2c14e; }
+@keyframes champion-glow {
+  50% { box-shadow: 0 0 0 3px #ffe08a, 0 0 28px 8px rgba(242, 193, 78, .85); }
+}
+@media (prefers-reduced-motion: reduce) { figure.is-champion { animation: none; } }
