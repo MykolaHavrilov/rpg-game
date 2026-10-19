@@ -29,6 +29,14 @@
   <main>
     <div class="stack">
       <div class="panel stack">
+        <h2>Мапа світу</h2>
+        <!-- Зони локацій і фігурка героя малюються поверх картинки (game.js → WORLD_MAP) -->
+        <div class="world-map" id="world-map">
+          <img class="map-img" src="../assets/images/Designer.webp" alt="Мапа світу" width="1536" height="1024">
+        </div>
+        <p class="note">Наведіть на місце на мапі, щоб побачити опис. Клік — обрати, подвійний клік — перейти.</p>
+      </div>
+      <div class="panel stack">
         <h2>Локації</h2>
         <div class="loc-grid" id="loc-list"></div>
       </div>
@@ -43,6 +51,8 @@
   <script src="../assets/js/data/classes.js" defer></script>
   <script src="../assets/js/stats.js" defer></script>
   <script src="../assets/js/data/enemies.js" defer></script>
+  <script src="../assets/js/data/skills.js" defer></script>
+  <script src="../assets/js/quests.js" defer></script>
   <script src="../assets/js/rarity.js" defer></script>
   <script src="../assets/js/save.js" defer></script>
   <script src="../assets/js/character.js" defer></script>
