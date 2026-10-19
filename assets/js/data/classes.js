@@ -37,11 +37,11 @@
       baseAttrs: { str: 1, agi: 1, int: 1, vit: 1, spi: 1 },
       levelAttrs: { str: 1, agi: 1, vit: 1 },   // +3 атрибути за рівень автоматично
       startItems: [
-        { id: "sword_wood", equip: true },
-        { id: "shirt_linen", equip: true },
-        { id: "pants_linen", equip: true },
-        { id: "shield_wood", qty: 1 },     // лежить в інвентарі — можна вдягнути
-        { id: "boots_simple", qty: 1 },    // лежить в інвентарі — можна вдягнути
+        { id: "sword_t1", equip: true },
+        { id: "linen_chest", equip: true },
+        { id: "linen_legs", equip: true },
+        { id: "shield_t1", qty: 1 },       // лежить в інвентарі — можна вдягнути
+        { id: "linen_feet", qty: 1 },      // лежить в інвентарі — можна вдягнути
         { id: "potion_hp_small", qty: 3 },
         { id: "potion_mp_small", qty: 1 }
       ],

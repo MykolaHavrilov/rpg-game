@@ -116,16 +116,34 @@
     return node;
   }
 
-  // Картинка з рідкістю; якщо копії немає — звичайна картинка
+  // Картинка з рідкістю; якщо копії немає — звичайна картинка;
+  // якщо картинки немає зовсім — onFail() (заглушка з назвою)
   function setItemImg(img, ref, onFail) {
     const id = RPG.refId(ref);
-    img.src = RPG.itemImgRef(ref);
+    const src = RPG.itemImgRef(ref);
+    if (!src) { onFail(); return false; }
+    img.src = src;
     img.addEventListener("error", function fallback() {
       const plain = RPG.itemImg(id);
-      if (!img.src.endsWith(plain.split("/").pop())) { img.src = plain; return; }
+      if (plain && !img.src.endsWith(plain.split("/").pop())) { img.src = plain; return; }
       img.removeEventListener("error", fallback);
       onFail();
     });
+    return true;
+  }
+
+  // Клас кольору рідкості для тексту заглушки
+  function rarityTextClass(ref) {
+    return RPG.hasRarity(RPG.refId(ref)) ? " rt-" + RPG.rarityOf(ref) : "";
+  }
+
+  // Маленька заглушка: перші літери назви кольором рідкості
+  function miniPlaceholder(ref, className) {
+    const name = RPG.itemName(ref);
+    const letters = name.split(/\s+/).map(w => w[0]).join("").slice(0, 3).toUpperCase();
+    const ph = el("span", `${className} mini-ph${rarityTextClass(ref)}`, letters);
+    ph.title = RPG.itemFullName(ref);
+    return ph;
   }
 
   // Наповнює клітинку предмета: картинка + кількість.
@@ -138,11 +156,15 @@
     cell.classList.add("has-icon");
     const img = el("img", "item-icon");
     img.alt = item.name;
-    setItemImg(img, ref, () => {
+    const showPlaceholder = () => {
       img.remove();
       cell.classList.remove("has-icon");
-      cell.prepend(el("span", "item-name", item.name));
-    });
+      cell.prepend(el("span", "item-name item-ph" + rarityTextClass(ref), item.name));
+    };
+    if (!setItemImg(img, ref, showPlaceholder)) {   // картинки немає — заглушка вже показана
+      if (qty > 1) cell.append(el("span", "item-qty", `×${qty}`));
+      return cell;
+    }
     cell.append(img);
     if (qty > 1) cell.append(el("span", "item-qty", `×${qty}`));
     return cell;
@@ -152,8 +174,8 @@
   function smallIcon(ref, className = "mini-icon") {
     const img = el("img", className);
     img.alt = "";
-    setItemImg(img, ref, () => img.remove());
-    return img;
+    const ok = setItemImg(img, ref, () => { if (img.isConnected) img.replaceWith(miniPlaceholder(ref, className)); });
+    return ok ? img : miniPlaceholder(ref, className);
   }
 
   function slotClass(ref, extra = "") {
@@ -428,6 +450,7 @@
       if (locData.type === "home") renderHome();
       else if (locData.type === "temple") renderTemple();
       else if (locData.type === "tavern") renderTavern();
+      else if (locData.type === "city") renderCity();
     }
 
     function renderHome() {
@@ -469,12 +492,20 @@
       place.append(el("p", null,
         `${locData.merchant || "Торговець"} продає за ${Math.round(RPG.SHOP_SELL_RATE * 100)}% вартості, ` +
         `а купує за ${Math.round(RPG.SHOP_BUY_RATE * 100)}%. Великі та чарівні зілля тут не купиш — лише здобути в бою.`));
-      place.append(el("p", null, `Ваше золото: ${fmtNum(save.character.gold)}`));
+      renderShop(place, locData.shop || []);
+      const row = el("div", "row");
+      row.append(link("До Домівки", "game.html?loc=home"), link("Мапа", "maps.html"));
+      place.append(row);
+    }
+
+    // Купівля / продаж (Шинок, торговець Гільдії)
+    function renderShop(box, shopIds) {
+      box.append(el("p", null, `Ваше золото: ${fmtNum(save.character.gold)}`));
 
       const cols = el("div", "row shop");
       const buyBox = el("div", "stack");
       buyBox.append(el("h3", null, "Купити"));
-      for (const id of locData.shop || []) {
+      for (const id of shopIds) {
         const item = RPG.ITEMS[id];
         if (!item || item.noShop) continue;
         const price = RPG.shopSellPrice(id);
@@ -548,10 +579,175 @@
       });
 
       cols.append(buyBox, sellBox);
-      place.append(cols);
+      box.append(cols);
+    }
+
+    // ---------- Місто: райони та Гільдія авантюристів ----------
+    let cityDistrict = "south";     // обраний район (Південний відкритий)
+    let guildNpc = "admin";         // admin | trader | trainer
+
+    function renderCity() {
+      place.append(el("p", null, locData.description));
+      const grid = el("div", "district-grid");
+      for (const d of locData.districts || []) {
+        const card = button("", "wf loc-card " + (d.locked ? "wf-locked" : "wf-link"));
+        card.append(el("strong", null, d.name), el("span", "loc-desc", d.locked ? "Закрито" : d.building));
+        if (cityDistrict === d.id) card.classList.add("is-selected");
+        card.addEventListener("click", () => { cityDistrict = d.id; renderPlace(); });
+        grid.append(card);
+      }
+      place.append(grid);
+
+      const d = (locData.districts || []).find(x => x.id === cityDistrict);
+      if (d) {
+        const box = el("div", "stack district");
+        box.append(el("h3", null, `${d.name} — ${d.building}`), el("p", null, d.description));
+        if (d.locked) box.append(el("p", "note", "Закрито — відкриється згодом."));
+        else if (d.id === "south") renderGuild(box);
+        place.append(box);
+      }
       const row = el("div", "row");
       row.append(link("До Домівки", "game.html?loc=home"), link("Мапа", "maps.html"));
       place.append(row);
+    }
+
+    function renderGuild(box) {
+      const tabs = el("div", "row npc-tabs");
+      for (const [id, name] of [["admin", "Адміністратор гільдії"], ["trader", "Торговець"], ["trainer", "Тренер"]]) {
+        tabs.append(button(name, "wf " + (guildNpc === id ? "wf-button" : "wf-link"), () => { guildNpc = id; renderPlace(); }));
+      }
+      box.append(tabs);
+      const npc = el("div", "stack npc-panel");
+      if (guildNpc === "admin") renderQuestBoard(npc);
+      else if (guildNpc === "trader") {
+        npc.append(el("p", null,
+          `Торговець гільдії продає зброю 1–2 виду, малі й середні зілля (за ${Math.round(RPG.SHOP_SELL_RATE * 100)}% вартості), ` +
+          `а купує будь-що за ${Math.round(RPG.SHOP_BUY_RATE * 100)}%.`));
+        renderShop(npc, RPG.GUILD_SHOP || []);
+      } else renderTrainer(npc);
+      box.append(npc);
+    }
+
+    // --- Адміністратор гільдії: завдання ---
+    function renderQuestBoard(box) {
+      const before = RPG.questState(save).offers.length;
+      RPG.fillOffers(save);
+      if (RPG.questState(save).offers.length !== before) RPG.saveGame(save).catch(e => console.error(e));
+      const qs = RPG.questState(save);
+      box.append(el("p", null,
+        `«Роботи вистачає — беріть до ${RPG.QUEST_MAX_ACTIVE} завдань одночасно.» Виконано завдань: ${qs.done}.`));
+
+      box.append(el("h3", null, "Ваші завдання"));
+      if (!qs.active.length) box.append(el("p", "note", "Немає взятих завдань."));
+      for (const quest of qs.active) {
+        const done = RPG.isQuestComplete(save, quest);
+        const r = el("div", "shop-row quest-row" + (done ? " quest-done" : ""));
+        const info = el("span", "shop-name", `${RPG.questTitle(quest)} — ${RPG.questProgress(save, quest)}/${quest.need}`);
+        info.append(el("small", null, ` · нагорода: ${RPG.describeReward(quest.reward)}`));
+        const turnIn = button("Здати", "wf wf-button", async () => {
+          const res = RPG.turnInQuest(save, quest.id);
+          if (!res.ok) { showMsg(msg, res.reason, true); return; }
+          await RPG.saveGame(save);
+          showMsg(msg, `Завдання виконано! Нагорода: ${RPG.describeReward(quest.reward)}.` +
+            (res.levelUps.length ? ` Новий рівень: ${res.levelUps[res.levelUps.length - 1]}!` : ""));
+          renderAll();
+        });
+        turnIn.disabled = !done;
+        const drop = button("Відмовитись", "wf wf-secondary", async () => {
+          if (!confirm(`Відмовитися від завдання «${RPG.questTitle(quest)}»?`)) return;
+          RPG.abandonQuest(save, quest.id);
+          await RPG.saveGame(save);
+          renderAll();
+        });
+        r.append(info, turnIn, drop);
+        box.append(r);
+      }
+
+      box.append(el("h3", null, "Нові завдання"));
+      for (const quest of qs.offers) {
+        const r = el("div", "shop-row quest-row");
+        const info = el("span", "shop-name", RPG.questTitle(quest));
+        info.append(el("small", null, ` · нагорода: ${RPG.describeReward(quest.reward)}`));
+        const take = button("Взяти", "wf wf-button", async () => {
+          const res = RPG.acceptQuest(save, quest.id);
+          if (!res.ok) { showMsg(msg, res.reason, true); return; }
+          await RPG.saveGame(save);
+          showMsg(msg, `Взято завдання: ${RPG.questTitle(quest)}.`);
+          renderAll();
+        });
+        take.disabled = qs.active.length >= RPG.QUEST_MAX_ACTIVE;
+        r.append(info, take);
+        box.append(r);
+      }
+    }
+
+    // --- Тренер: володіння зброєю та навички ---
+    function masteryBonusText(type, lvl) {
+      const parts = [];
+      for (const [k, max] of Object.entries(RPG.MASTERY_BONUS[type] || {})) {
+        const v = Math.round(max * lvl / RPG.MASTERY_MAX * 10) / 10;
+        parts.push(`${RPG.STAT_NAMES[k] || k} +${v}`);
+      }
+      return parts.join(", ");
+    }
+
+    function renderTrainer(box) {
+      const type = RPG.weaponTypeOf(save);
+      const cap = RPG.masteryCap(save.character.level);
+      box.append(el("p", null, "«Покажи, чим б'єшся, — і я навчу тебе володіти цим краще.» " +
+        "Тренер навчає лише тієї зброї, яка зараз у вас у правій руці."));
+      box.append(el("p", "note",
+        `Межа володіння зараз: ${cap}` + (cap < RPG.MASTERY_MAX ? " (з 10 рівня персонажа — 20)." : ".") +
+        " Володіння 10 відкриває зброю 2 виду, 20 — 3 виду."));
+
+      box.append(el("h3", null, "Володіння зброєю"));
+      for (const [t, wt] of Object.entries(RPG.WEAPON_TYPES)) {
+        const lvl = RPG.getMastery(save, t);
+        const r = el("div", "shop-row skill-row" + (t === type ? " is-current" : ""));
+        const info = el("span", "shop-name", `${wt.mastery}: ${lvl}/${cap}` + (t === type ? " · у руках" : ""));
+        info.append(el("small", null, lvl ? ` · ${masteryBonusText(t, lvl)}` : ` · на 20: ${masteryBonusText(t, RPG.MASTERY_MAX)}`));
+        r.append(info);
+        if (t === type) {
+          const cost = RPG.masteryCost(lvl + 1);
+          const b = button(lvl >= cap ? "Максимум" : `Тренувати (${fmtNum(cost)} зол.)`, "wf wf-button", async () => {
+            const res = RPG.trainMastery(save, t);
+            if (!res.ok) { showMsg(msg, res.reason, true); return; }
+            await RPG.saveGame(save);
+            showMsg(msg, `${wt.mastery}: ${res.level} (−${fmtNum(res.cost)} золота).`);
+            renderAll();
+          });
+          b.disabled = lvl >= cap || save.character.gold < cost;
+          r.append(b);
+        }
+        box.append(r);
+      }
+
+      box.append(el("h3", null, "Активні навички та бафи"));
+      if (!type) { box.append(el("p", "note", "Вдягніть зброю, щоб тренер показав навички для неї.")); return; }
+      const mastery = RPG.getMastery(save, type);
+      for (const id of RPG.skillsForWeapon(type)) {
+        const sk = RPG.SKILLS[id];
+        const lvl = RPG.skillLevel(save, id);
+        const r = el("div", "shop-row skill-row");
+        const info = el("span", "shop-name", `${sk.kind === "buff" ? "Баф" : "Навичка"}: ${sk.name} — ${lvl}/${RPG.SKILL_MAX}`);
+        info.append(el("small", null, ` · ${sk.desc} ${RPG.describeSkill(id, Math.max(1, lvl))}` +
+          (mastery < sk.req ? ` · потрібно володіння ${sk.req}` : "")));
+        const cost = RPG.skillCost(lvl + 1);
+        const label = lvl >= RPG.SKILL_MAX ? "Максимум" : `${lvl ? "Покращити" : "Вивчити"} (${fmtNum(cost)} зол.)`;
+        const b = button(label, "wf wf-button", async () => {
+          const res = RPG.learnSkill(save, id);
+          if (!res.ok) { showMsg(msg, res.reason, true); return; }
+          await RPG.saveGame(save);
+          showMsg(msg, `«${sk.name}»: рівень ${res.level} (−${fmtNum(res.cost)} золота). Додайте навичку в чергу дій у бою.`);
+          renderAll();
+        });
+        b.disabled = lvl >= RPG.skillCap(save, id) || mastery < sk.req || save.character.gold < cost;
+        if (b.disabled && mastery >= sk.req && lvl >= RPG.skillCap(save, id) && lvl < RPG.SKILL_MAX) {
+          b.title = "Рівень навички не може перевищувати рівень володіння зброєю";
+        }
+        r.append(info, b);
+        box.append(r);
+      }
     }
 
     // ---------- Бій ----------
@@ -580,12 +776,39 @@
       const weaponItem = RPG.ITEMS[RPG.refId(weaponRef)];
       const weaponSt = weaponItem ? RPG.itemStats(weaponRef) : {};
       const magicWeapon = weaponItem && (weaponSt.magic || 0) > (weaponSt.attack || 0);
+      // Варіанти для кожної клітинки: порожньо, звичайний удар, вивчені навички цієї зброї
+      const wtype = weaponItem?.weaponType || null;
+      const options = [["", "—"], ["attack", magicWeapon ? "Іскра" : "Удар"]];
+      if (wtype) {
+        for (const id of RPG.skillsForWeapon(wtype)) {
+          if (RPG.skillLevel(save, id) > 0) options.push([id, `${RPG.SKILLS[id].name} (${RPG.SKILLS[id].mp} MP)`]);
+        }
+      }
       for (let i = 0; i < 10; i++) {
-        const action = save.battleQueue[i];
-        let label = "—";
-        if (action === "attack") label = magicWeapon ? "Іскра" : "Удар";
-        if (action === "spell") label = "Іскра";
-        box.append(el("div", action ? "wf wf-slot" : "wf wf-slot slot-empty", `${i + 1}. ${label}`));
+        const action = save.battleQueue[i] || "";
+        const sel = el("select", "wf wf-slot queue-select" + (action ? "" : " slot-empty"));
+        sel.title = `Дія ${i + 1}`;
+        sel.setAttribute("aria-label", `Дія ${i + 1} у черзі`);
+        const opts = options.slice();
+        if (action && !opts.some(o => o[0] === action)) {
+          const sk = RPG.SKILLS[action];
+          opts.push([action, sk ? `${sk.name} (інша зброя — буде удар)` : (action === "spell" ? "Іскра" : action)]);
+        }
+        for (const [val, text] of opts) {
+          const o = el("option", null, `${i + 1}. ${text}`);
+          o.value = val;
+          if (val === action) o.selected = true;
+          sel.append(o);
+        }
+        sel.addEventListener("change", async () => {
+          if (fighting) return;
+          save.battleQueue[i] = sel.value;
+          for (let k = 0; k < 10; k++) save.battleQueue[k] ??= "";
+          if (!save.battleQueue.some(Boolean)) save.battleQueue[0] = "attack";
+          await RPG.saveGame(save);
+          renderQueue();
+        });
+        box.append(sel);
       }
       $("weapon-info").textContent = weaponItem
         ? `Зброя: ${RPG.itemFullName(weaponRef)}${magicWeapon ? " (магічна — витрачає MP)" : ""}`
@@ -654,6 +877,7 @@
         const loot = RPG.rollLoot(enemyId);
         levelUps = RPG.applyReward(save, enemy.exp, loot);
         save.character.kills = (save.character.kills || 0) + 1;
+        summary.push(...RPG.questOnKill(save, enemyId).map(s => "Завдання: " + s));
         summary.push(`+${enemy.exp} EXP`);
         if (loot.gold) summary.push(`+${loot.gold} золота`);
         for (const it of loot.items) {
@@ -767,7 +991,7 @@
     if (!save) return;
 
     const DERIVED = ["hp", "mp", "attack", "magic", "defense", "magicDefense", "speed",
-                     "crit", "dodge", "blockPhys", "blockMag", "hpRegen", "mpRegen"];
+                     "crit", "dodge", "blockPhys", "blockMag", "hpRegen", "mpRegen", "attackSpeedPct"];
 
     function render() {
       renderHeroBars(save);
@@ -845,6 +1069,24 @@
         cell.append(item ? rarityName(ref) : el("strong", null, "порожньо"));
         if (item) cell.title = describeStats(ref);
         slots.append(cell);
+      }
+
+      // Володіння зброєю та вивчені навички
+      const mBox = $("mastery-list");
+      if (mBox) {
+        mBox.innerHTML = "";
+        const cap = RPG.masteryCap(ch.level);
+        const wtype = RPG.weaponTypeOf(save);
+        for (const [t, wt] of Object.entries(RPG.WEAPON_TYPES)) {
+          const row = el("div", "stat-row");
+          row.append(el("span", null, wt.mastery + (t === wtype ? " (у руках)" : "")),
+                     el("strong", null, `${RPG.getMastery(save, t)} / ${cap}`));
+          mBox.append(row);
+        }
+        const learned = Object.entries(ch.skills || {}).filter(([, l]) => l > 0);
+        mBox.append(el("p", "note", learned.length
+          ? "Навички: " + learned.map(([id, l]) => `${RPG.SKILLS[id]?.name || id} ${l}`).join(", ")
+          : "Навичок ще немає. Тренер — у Гільдії авантюристів (Місто, Південний район)."));
       }
     }
 
@@ -939,7 +1181,16 @@
       desc.append(el("div", null, item.description));
       const st = describeStats(ref);
       if (st) desc.append(el("div", null, "Характеристики: " + st));
-      if (item.slot) desc.append(el("div", null, `Слот: ${RPG.SLOTS[item.slot]} · потрібен рівень ${item.levelReq || 1}`));
+      if (item.slot) {
+        const slotName = RPG.slotsFor(item.slot).map(s => RPG.SLOTS[s]).join(" / ");
+        desc.append(el("div", null, `Слот: ${slotName} · потрібен рівень ${item.levelReq || 1}`));
+      }
+      if (item.weaponType) {
+        const need = RPG.TIER_MASTERY[item.tier] || 0;
+        desc.append(el("div", null, `Зброя: ${RPG.WEAPON_TYPES[item.weaponType].name}` +
+          (need ? ` · потрібно ${RPG.WEAPON_TYPES[item.weaponType].mastery.toLowerCase()} ${need}` : "") +
+          (item.weaponType === "bow" ? " · дворучна (у лівій руці — лише колчан)" : "")));
+      }
       const eff = describeEffect(item);
       if (eff) desc.append(el("div", null, eff));
       desc.append(el("div", null,
@@ -969,12 +1220,13 @@
 
     btnEquip.addEventListener("click", async () => {
       const ref = selectedRef();
-      const slot = RPG.ITEMS[ref.id].slot;
+      const slot = RPG.equipSlotFor(save, ref.id);
       const old = save.equipment[slot];
       if (old && !confirm(`Замінити «${RPG.itemFullName(old)}» на «${RPG.itemFullName(ref)}»?`)) return;
       const r = RPG.equipItem(save, selected.index);
       selected = r.ok ? { kind: "eq", slot } : selected;
-      await commit(r.ok ? `Вдягнено: ${RPG.itemFullName(ref)}` : r.reason, !r.ok);
+      const extra = r.ok && r.removed?.length ? ` Знято з лівої руки: ${r.removed.map(x => RPG.itemFullName(x)).join(", ")}.` : "";
+      await commit(r.ok ? `Вдягнено: ${RPG.itemFullName(ref)}.${extra}` : r.reason, !r.ok);
     });
 
     btnUnequip.addEventListener("click", async () => {
@@ -1017,18 +1269,132 @@
   // ============================================================
   // МАПА
   // ============================================================
-  const LOCATION_ORDER = ["home", "temple", "village_start", "tavern", "forest_path", "forest_cave"];
-  const TYPE_LABEL = { home: "Безпечно", temple: "Безпечно", tavern: "Торговець", combat: "Бої" };
+  const LOCATION_ORDER = ["home", "temple", "village_start", "tavern", "city", "forest_path", "forest_cave"];
+  const TYPE_LABEL = { home: "Безпечно", temple: "Безпечно", tavern: "Торговець", city: "Гільдія", combat: "Бої" };
+
+  // Зони локацій на картинці мапи (assets/images/Designer.*), у відсотках:
+  // x, y — центр зони; w, h — ширина й висота. Нову локацію достатньо дописати сюди.
+  const WORLD_MAP = {
+    home:          { x: 8.5, y: 69, w: 15, h: 15 },
+    temple:        { x: 13,  y: 31, w: 12, h: 22 },
+    village_start: { x: 40,  y: 51, w: 17, h: 17 },
+    tavern:        { x: 63,  y: 56, w: 15, h: 15 },
+    city:          { x: 52,  y: 20, w: 34, h: 26 },
+    forest_path:   { x: 86,  y: 72, w: 13, h: 22 },
+    forest_cave:   { x: 92,  y: 19, w: 12, h: 16 }
+  };
+
+  // Фігурка героя (SVG)
+  const HERO_FIGURE = `<svg viewBox="0 0 24 40" aria-hidden="true">
+    <circle cx="12" cy="6" r="5" fill="#f4d3a6" stroke="#3a2a14" stroke-width="1.2"/>
+    <path d="M6 13 h12 l2 13 h-4 l-1 13 h-3 l-0.5 -9 h-1 l-0.5 9 h-3 l-1 -13 h-4 z" fill="#2f6fd6" stroke="#10213f" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M7 15 l-4 9" stroke="#f4d3a6" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M17 15 l3 6 l1 -7" stroke="#8a5a2b" stroke-width="2" stroke-linecap="round" fill="none"/>
+  </svg>`;
 
   async function pageMaps() {
     const save = await requireSave();
     if (!save) return;
     const grid = $("loc-list");
     const details = $("loc-details");
+    const mapBox = $("world-map");
     const ids = [...LOCATION_ORDER, ...Object.keys(RPG.LOCATIONS).filter(id => !LOCATION_ORDER.includes(id))];
     let selected = save.location.map;
+    let traveling = false;
+
+    // Стан локації для героя: here | open | closed
+    function locState(id) {
+      if (save.location.map === id) return { kind: "here", text: "Ви тут" };
+      const loc = RPG.LOCATIONS[id];
+      const can = RPG.canEnterLocation(id, save.character.level);
+      if (can.ok) return { kind: "open", text: "Можна перейти" };
+      if (loc.locked) return { kind: "closed", text: "Закрито — відкриється згодом" };
+      return { kind: "closed", text: `Недоступно: потрібен ${loc.minLevel} рівень (у вас ${save.character.level})` };
+    }
+
+    function shortText(s, n = 130) {
+      return s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s;
+    }
+
+    // ---------- Мапа-картинка: зони, підказка, фігурка героя ----------
+    let tip = null, hero = null;
+    function buildWorldMap() {
+      if (!mapBox) return;
+      mapBox.querySelectorAll(".map-spot, .map-tip, .map-hero").forEach(n => n.remove());
+      for (const id of ids) {
+        const pos = WORLD_MAP[id], loc = RPG.LOCATIONS[id];
+        if (!pos || !loc) continue;
+        const st = locState(id);
+        const spot = button("", `map-spot is-${st.kind}`);
+        spot.dataset.loc = id;
+        Object.assign(spot.style, { left: pos.x + "%", top: pos.y + "%", width: pos.w + "%", height: pos.h + "%" });
+        spot.setAttribute("aria-label", `${loc.name} — ${st.text}`);
+        spot.addEventListener("mouseenter", () => showTip(id));
+        spot.addEventListener("focus", () => showTip(id));
+        spot.addEventListener("mouseleave", () => showTip(selected));
+        spot.addEventListener("blur", () => showTip(selected));
+        spot.addEventListener("click", () => { selected = id; render(); });
+        spot.addEventListener("dblclick", () => travel(id));
+        mapBox.append(spot);
+      }
+      tip = el("div", "map-tip");
+      tip.hidden = true;
+      mapBox.append(tip);
+
+      // Фігурка героя (для групи в майбутньому — по фігурці на кожного)
+      hero = el("div", "map-hero");
+      hero.innerHTML = HERO_FIGURE;
+      hero.append(el("span", "hero-tag", save.character.name));
+      placeHero(save.location.map, false);
+      mapBox.append(hero);
+    }
+
+    function heroPoint(id) {
+      const pos = WORLD_MAP[id] || WORLD_MAP.home;
+      return { x: pos.x, y: pos.y + pos.h * 0.25 };
+    }
+
+    function placeHero(id, animate) {
+      if (!hero) return;
+      hero.classList.toggle("no-anim", !animate);
+      const pt = heroPoint(id);
+      hero.style.left = pt.x + "%";
+      hero.style.top = pt.y + "%";
+    }
+
+    function showTip(id) {
+      if (!tip) return;
+      mapBox.querySelectorAll(".map-spot").forEach(s => s.classList.toggle("is-selected", s.dataset.loc === selected));
+      const pos = WORLD_MAP[id], loc = RPG.LOCATIONS[id];
+      if (!pos || !loc) { tip.hidden = true; return; }
+      const st = locState(id);
+      tip.innerHTML = "";
+      tip.append(el("strong", null, loc.name), el("div", `tip-status tip-${st.kind}`, st.text),
+                 el("div", "tip-desc", shortText(loc.locked ? "Закрито — відкриється згодом." : loc.description)));
+      const below = pos.y < 45;
+      tip.style.left = Math.min(82, Math.max(18, pos.x)) + "%";
+      tip.style.top = (below ? pos.y + pos.h / 2 : pos.y - pos.h / 2) + "%";
+      tip.classList.toggle("tip-below", below);
+      tip.hidden = false;
+    }
+
+    // Перехід: фігурка йде до нової локації, потім відкривається її сторінка
+    function travel(id) {
+      if (traveling) return;
+      const href = id === save.location.map ? "game.html" : "game.html?loc=" + encodeURIComponent(id);
+      if (id !== save.location.map && !RPG.canEnterLocation(id, save.character.level).ok) {
+        selected = id; render();
+        return;
+      }
+      traveling = true;
+      if (!hero || id === save.location.map) { location.href = href; return; }
+      hero.classList.add("is-walking");
+      placeHero(id, true);
+      setTimeout(() => { location.href = href; }, 950);
+    }
 
     function render() {
+      showTip(selected);
       grid.innerHTML = "";
       for (const id of ids) {
         const loc = RPG.LOCATIONS[id];
@@ -1071,12 +1437,15 @@
       }
       const can = RPG.canEnterLocation(selected, save.character.level);
       if (can.ok) {
-        details.append(link("Перейти сюди", "game.html?loc=" + encodeURIComponent(selected)));
+        const go = link("Перейти сюди", "game.html?loc=" + encodeURIComponent(selected));
+        go.addEventListener("click", ev => { ev.preventDefault(); travel(selected); });
+        details.append(go);
       } else {
         details.append(el("p", "note", `Доступ з ${loc.minLevel} рівня персонажа (зараз у вас ${save.character.level}).`));
       }
     }
 
+    buildWorldMap();
     render();
   }
 

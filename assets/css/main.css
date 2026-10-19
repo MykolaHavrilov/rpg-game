@@ -318,3 +318,29 @@ dialog { max-width: calc(100vw - 32px); }
 .rt-magic     { color: #6ea2ff; }
 .rt-epic      { color: #c58bff; }
 .rt-legendary { color: #ffb04d; text-shadow: 0 0 6px rgba(255, 157, 46, .5); }
+
+/* ---------- Заглушки для предметів без картинки ---------- */
+.item-ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 3px;
+  text-align: center;
+  font-size: .62rem;
+  line-height: 1.15;
+  font-weight: 600;
+}
+.mini-ph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .07);
+  box-shadow: inset 0 0 0 1px currentColor;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+}

@@ -49,7 +49,9 @@ function createNewSave(name, classId = DEFAULT_CLASS) {
       deaths: 0,
       hp: 0,   // заповнимо нижче, після підрахунку характеристик
       mp: 0,
-      regenAt: Date.now()   // коли востаннє рахували відновлення
+      regenAt: Date.now(),  // коли востаннє рахували відновлення
+      mastery: {},          // володіння зброєю: { sword: 0..20, ... } (data/skills.js)
+      skills: {}            // активні навички: { skillId: 1..10 }
     },
     equipment: {},
     inventory: [],
@@ -63,7 +65,7 @@ function createNewSave(name, classId = DEFAULT_CLASS) {
   for (const it of cls.startItems) {
     const item = ITEMS[it.id];
     if (!item) continue;
-    if (it.equip && item.slot) save.equipment[item.slot] = RPG.makeItem(it.id, "common", { fromShop: true });
+    if (it.equip && item.slot) save.equipment[equipSlotFor(save, it.id)] = RPG.makeItem(it.id, "common", { fromShop: true });
     else addItem(save, it.id, it.qty || 1);
   }
 
@@ -76,8 +78,8 @@ function createNewSave(name, classId = DEFAULT_CLASS) {
 // база професії + приріст за рівні + атрибути + екіпірування
 
 const STAT_KEYS = ["hp", "mp", "attack", "magic", "defense", "magicDefense", "speed",
-                   "crit", "dodge", "blockPhys", "blockMag", "hpRegen", "mpRegen"];
-const DECIMAL_KEYS = ["crit", "dodge", "blockPhys", "blockMag", "hpRegen", "mpRegen"];
+                   "crit", "dodge", "blockPhys", "blockMag", "hpRegen", "mpRegen", "attackSpeedPct"];
+const DECIMAL_KEYS = ["crit", "dodge", "blockPhys", "blockMag", "hpRegen", "mpRegen", "attackSpeedPct"];
 
 function calcStats(save) {
   const cls = getClass(save.character.classId);
@@ -107,6 +109,12 @@ function calcStats(save) {
     }
   }
 
+  // Володіння вдягненою зброєю (data/skills.js)
+  const mastery = RPG.masteryBonus ? RPG.masteryBonus(save) : {};
+  for (const key in mastery) {
+    if (key !== "attackSpeedPct") stats[key] = (stats[key] || 0) + mastery[key];
+  }
+
   const CAP = RPG.STAT_CAP;
   stats.crit = Math.min(stats.crit, CAP.crit);
   stats.dodge = Math.min(stats.dodge, CAP.dodge);
@@ -114,6 +122,12 @@ function calcStats(save) {
   stats.blockPhys = Math.min(stats.blockPhys, CAP.block);
   stats.blockMag = Math.min(stats.blockMag, CAP.block);
   addStats(stats, legendOver);   // легендарні — понад ліміт
+
+  // Швидкість атаки з володіння (напр. лук до +25%) — теж понад ліміт,
+  // але не більше 200% ліміту: це другий, крайній ліміт швидкості
+  stats.attackSpeedPct = mastery.attackSpeedPct || 0;
+  if (stats.attackSpeedPct) stats.speed *= 1 + stats.attackSpeedPct / 100;
+  stats.speed = Math.min(stats.speed, CAP.speed * 2);
 
   for (const key in stats) {
     stats[key] = DECIMAL_KEYS.includes(key)
@@ -427,7 +441,29 @@ function canEquip(save, id) {
     const names = item.classes.map(c => CLASSES[c]?.name || c).join(", ");
     return { ok: false, reason: `Лише для професій: ${names}.` };
   }
+  // Зброя 2–3 виду — лише з достатнім володінням
+  if (item.weaponType && item.tier > 1 && RPG.TIER_MASTERY) {
+    const need = RPG.TIER_MASTERY[item.tier];
+    const have = RPG.getMastery(save, item.weaponType);
+    if (have < need) {
+      return { ok: false, reason: `Потрібно: ${RPG.WEAPON_TYPES[item.weaponType].mastery.toLowerCase()} ${need} (зараз ${have}).` };
+    }
+  }
+  // Лук — дворучний: у лівій руці лише колчан; колчан — лише з луком
+  const main = ITEMS[RPG.refId(save.equipment.mainHand)];
+  if (item.offType === "quiver" && main?.weaponType !== "bow") {
+    return { ok: false, reason: "Колчан можна вдягнути лише разом з луком." };
+  }
+  if (item.slot === "offHand" && item.offType !== "quiver" && main?.weaponType === "bow") {
+    return { ok: false, reason: "Лук тримають двома руками: у лівій руці можна мати лише колчан." };
+  }
   return { ok: true };
+}
+
+// У який слот персонажа піде річ (кільця/сережки — у вільний з двох)
+function equipSlotFor(save, id) {
+  const group = RPG.slotsFor(ITEMS[id]?.slot);
+  return group.find(s => !save.equipment[s]) || group[0];
 }
 
 // what — номер клітинки інвентаря (або ID — тоді береться перша така річ)
@@ -444,12 +480,26 @@ function equipItem(save, what) {
   const check = canEquip(save, entry.id);
   if (!check.ok) return check;
 
+  const slot = equipSlotFor(save, entry.id);
   save.inventory.splice(index, 1);
-  const old = save.equipment[item.slot];
+  const old = save.equipment[slot];
   if (old) save.inventory.splice(index, 0, RPG.normalizeRef(old));  // знята річ — у ту ж клітинку
-  save.equipment[item.slot] = RPG.normalizeRef(entry);
+  save.equipment[slot] = RPG.normalizeRef(entry);
+
+  // Лук ↔ ліва рука: лук лише з колчаном, колчан лише з луком
+  const removed = [];
+  const off = save.equipment.offHand;
+  if (off) {
+    const isBow = ITEMS[RPG.refId(save.equipment.mainHand)]?.weaponType === "bow";
+    const isQuiver = ITEMS[RPG.refId(off)]?.offType === "quiver";
+    if (isBow !== isQuiver) {
+      delete save.equipment.offHand;
+      addRefToList(save.inventory, off);
+      removed.push(off);
+    }
+  }
   clampHpMp(save);
-  return { ok: true, replaced: old || null, ref: entry };
+  return { ok: true, replaced: old || null, ref: entry, slot, removed };
 }
 
 function unequipItem(save, slot) {
@@ -457,6 +507,12 @@ function unequipItem(save, slot) {
   if (!ref) return { ok: false, reason: "Слот порожній." };
   delete save.equipment[slot];
   addRefToList(save.inventory, ref);
+  // Без лука колчан у лівій руці не тримається
+  const off = save.equipment.offHand;
+  if (slot === "mainHand" && off && ITEMS[RPG.refId(off)]?.offType === "quiver") {
+    delete save.equipment.offHand;
+    addRefToList(save.inventory, off);
+  }
   clampHpMp(save);
   return { ok: true, ref };
 }
@@ -467,7 +523,7 @@ function previewEquip(save, what) {
   const item = ITEMS[entry?.id];
   if (!item?.slot) return {};
   const before = calcStats(save);
-  const test = { ...save, equipment: { ...save.equipment, [item.slot]: entry } };
+  const test = { ...save, equipment: { ...save.equipment, [equipSlotFor(save, entry.id)]: entry } };
   const after = calcStats(test);
   const diff = {};
   for (const key in after) {
@@ -509,9 +565,12 @@ function useItem(save, id) {
 
 // ---------- Торгівля в Шинку ----------
 
+// Шинок — свій асортимент; Місто — торговець Гільдії авантюристів
 function currentShop(save) {
   const loc = RPG.getLocation(save.location.map);
-  return loc.type === "tavern" ? (loc.shop || []) : null;
+  if (loc.type === "tavern") return loc.shop || [];
+  if (loc.type === "city") return RPG.GUILD_SHOP || [];
+  return null;
 }
 
 function buyItem(save, id) {
@@ -569,7 +628,7 @@ Object.assign(RPG, {
   getClassChanges, changeClass,
   countInList, addToList, addRefToList, removeFromList, countItem, addItem, removeItem,
   isAtHome, moveToChest, takeFromChest,
-  canEquip, equipItem, unequipItem, previewEquip, useItem,
+  canEquip, equipSlotFor, equipItem, unequipItem, previewEquip, useItem,
   currentShop, buyItem, sellItem, applyReward
 });
 })(window.RPG);

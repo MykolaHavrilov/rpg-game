@@ -10,6 +10,12 @@
 // noShop  — торговець цю річ НЕ продає (лише здобич з ворогів).
 // rarity  — "rare" підсвічується в інвентарі.
 // maxStack — скільки штук в одній клітинці: зілля 100, ресурси 200.
+// tier    — вид/клас речі: 1 — дерев'яна/лляна/мідна (з 1 рівня, біжутерія з 2),
+//           2 — кам'яна/шкіряна/срібна (з 10 рівня), 3 — залізна/золота (з 20 рівня).
+// weaponType — тип основної зброї: sword, dagger, axe, bow, staff (див. data/skills.js).
+//           Зброя 2 виду потребує володіння 10, 3 виду — володіння 20.
+// offType — річ для лівої руки: shield, quiver (лише з луком), orb, knife.
+// img: null — картинки ще немає: показується заглушка з назвою та кольором рідкості.
 // effect  — для зілля: healHp / healMp (одиниці),
 //           healHpPct / healMpPct (частка від максимуму: 0.5 = 50%).
 // ============================================================
@@ -19,16 +25,29 @@
 const IMG_BASE = RPG.asset("assets/img/items/");
 
 // Слоти екіпірування
+// Слоти екіпірування (12) — у такому порядку показуються в грі
 const SLOTS = {
-  mainHand: "Основна рука",
-  offHand: "Друга рука",
+  mainHand: "Права рука (зброя)",
+  offHand: "Ліва рука",
   head: "Голова",
   chest: "Тіло",
-  legs: "Ноги",
+  legs: "Штани",
+  hands: "Наручі",
   feet: "Взуття",
-  ring: "Кільце",
-  amulet: "Амулет"
+  earring1: "Сережка 1",
+  ring1: "Кільце 1",
+  amulet: "Амулет",
+  ring2: "Кільце 2",
+  earring2: "Сережка 2"
 };
+// Кільця й сережки можна носити по дві: slot предмета → слоти персонажа
+const SLOT_GROUPS = {
+  ring: ["ring1", "ring2"],
+  earring: ["earring1", "earring2"]
+};
+function slotsFor(itemSlot) {
+  return SLOT_GROUPS[itemSlot] || (itemSlot ? [itemSlot] : []);
+}
 
 // Назви характеристик для відображення в інтерфейсі
 const STAT_NAMES = {
@@ -42,6 +61,7 @@ const STAT_NAMES = {
   crit: "Шанс криту, %",
   blockPhys: "Блок фіз. шкоди, %",
   blockMag: "Блок маг. шкоди, %",
+  attackSpeedPct: "Швидкість атаки (володіння), %",
   dodge: "Ухилення, %",
   hpRegen: "Відновлення HP за 10 с",
   mpRegen: "Відновлення MP за 10 с",
@@ -56,138 +76,318 @@ const STAT_NAMES = {
 // Без нього предмет підходить усім.
 
 const ITEMS = {
-  // ---------- ЗБРОЯ ----------
-  sword_wood: {
+  // ---------- ОСНОВНА ЗБРОЯ (права рука) ----------
+  sword_t1: {
     name: "Дерев'яний меч", img: "sword_wood.webp",
-    type: "weapon", slot: "mainHand", levelReq: 1, price: 10,
-    stats: { attack: 3 },
-    description: "Тренувальний меч. Краще, ніж кулаки."
+    type: "weapon", slot: "mainHand", tier: 1, levelReq: 1, price: 12, weaponType: "sword",
+    stats: { attack: 5, crit: 1 },
+    description: "Тренувальний меч зі звичайного дерева."
   },
-  dagger_rusty: {
-    name: "Іржавий кинджал", img: "dagger_rusty.webp",
-    type: "weapon", slot: "mainHand", levelReq: 2, price: 25,
-    stats: { attack: 4, agi: 1, crit: 2 },
-    description: "Легкий і швидкий. Знайдений у щурячій норі."
+  sword_t2: {
+    name: "Кам'яний меч", img: null,
+    type: "weapon", slot: "mainHand", tier: 2, levelReq: 10, price: 180, weaponType: "sword",
+    stats: { attack: 20, crit: 2 },
+    description: "Важкий меч із тесаного каменю."
   },
-  staff_oak: {
-    name: "Дубовий посох", img: "staff_oak.webp",
-    type: "weapon", slot: "mainHand", levelReq: 2, price: 45,
-    stats: { attack: 1, magic: 5, mp: 10, int: 1 },
-    description: "Підсилює заклинання."
-  },
-  sword_iron: {
+  sword_t3: {
     name: "Залізний меч", img: "sword_iron.webp",
-    type: "weapon", slot: "mainHand", levelReq: 3, price: 60,
-    stats: { attack: 7, crit: 1 },
-    description: "Надійна зброя мандрівника."
+    type: "weapon", slot: "mainHand", tier: 3, levelReq: 20, price: 900, weaponType: "sword", noShop: true,
+    stats: { attack: 40, crit: 3 },
+    description: "Надійний залізний клинок."
   },
-  club_spiked: {
-    name: "Палиця з шипами", img: "club_spiked.webp",
-    type: "weapon", slot: "mainHand", levelReq: 4, price: 70,
-    stats: { attack: 9, str: 1 },
-    description: "Важка, але кожен удар відчутний."
+  dagger_t1: {
+    name: "Дерев'яний кинджал", img: null,
+    type: "weapon", slot: "mainHand", tier: 1, levelReq: 1, price: 12, weaponType: "dagger",
+    stats: { attack: 4, crit: 3, speed: 1 },
+    description: "Легкий дерев'яний кинджал."
   },
-  staff_moon: {
-    name: "Посох місячного виття", img: "staff_moon.webp",
-    type: "weapon", slot: "mainHand", levelReq: 5, price: 140, noShop: true,
-    stats: { attack: 2, magic: 11, mp: 25, int: 2, spi: 1 },
-    description: "Холодне сяйво місяця в дереві."
+  dagger_t2: {
+    name: "Кам'яний кинджал", img: null,
+    type: "weapon", slot: "mainHand", tier: 2, levelReq: 10, price: 170, weaponType: "dagger",
+    stats: { attack: 15, crit: 5, speed: 2 },
+    description: "Гострий кремінний кинджал."
   },
-  sword_steel: {
-    name: "Сталевий меч", img: "sword_steel.webp",
-    type: "weapon", slot: "mainHand", levelReq: 6, price: 160, noShop: true,
-    stats: { attack: 12, str: 1, crit: 2 },
-    description: "Добре врівноважений клинок."
+  dagger_t3: {
+    name: "Залізний кинджал", img: "dagger_rusty.webp",
+    type: "weapon", slot: "mainHand", tier: 3, levelReq: 20, price: 850, weaponType: "dagger", noShop: true,
+    stats: { attack: 30, crit: 8, speed: 3 },
+    description: "Залізний кинджал — швидкий і підступний."
+  },
+  axe_t1: {
+    name: "Дерев'яна сокира", img: null,
+    type: "weapon", slot: "mainHand", tier: 1, levelReq: 1, price: 14, weaponType: "axe",
+    stats: { attack: 7, str: 1, speed: -1 },
+    description: "Груба дерев'яна сокира — б'є сильно, але повільно."
+  },
+  axe_t2: {
+    name: "Кам'яна сокира", img: null,
+    type: "weapon", slot: "mainHand", tier: 2, levelReq: 10, price: 190, weaponType: "axe",
+    stats: { attack: 26, str: 2, speed: -1 },
+    description: "Кам'яна сокира з важким обухом."
+  },
+  axe_t3: {
+    name: "Залізна сокира", img: null,
+    type: "weapon", slot: "mainHand", tier: 3, levelReq: 20, price: 950, weaponType: "axe", noShop: true,
+    stats: { attack: 50, str: 3, speed: -2 },
+    description: "Залізна сокира лісоруба-воїна."
+  },
+  bow_t1: {
+    name: "Дерев'яний лук", img: null,
+    type: "weapon", slot: "mainHand", tier: 1, levelReq: 1, price: 14, weaponType: "bow",
+    stats: { attack: 5, crit: 2, speed: 1 },
+    description: "Простий дерев'яний лук."
+  },
+  bow_t2: {
+    name: "Кам'яний лук", img: null,
+    type: "weapon", slot: "mainHand", tier: 2, levelReq: 10, price: 190, weaponType: "bow",
+    stats: { attack: 19, crit: 3, speed: 2 },
+    description: "Лук із кам'яними вістрями стріл."
+  },
+  bow_t3: {
+    name: "Залізний лук", img: null,
+    type: "weapon", slot: "mainHand", tier: 3, levelReq: 20, price: 950, weaponType: "bow", noShop: true,
+    stats: { attack: 38, crit: 4, speed: 3 },
+    description: "Лук, окутий залізом."
+  },
+  staff_t1: {
+    name: "Дерев'яний посох", img: "staff_oak.webp",
+    type: "weapon", slot: "mainHand", tier: 1, levelReq: 1, price: 14, weaponType: "staff",
+    stats: { attack: 1, magic: 6, mp: 10, int: 1 },
+    description: "Дерев'яний посох учня. Кидає «Іскру»."
+  },
+  staff_t2: {
+    name: "Кам'яний посох", img: null,
+    type: "weapon", slot: "mainHand", tier: 2, levelReq: 10, price: 190, weaponType: "staff",
+    stats: { attack: 3, magic: 22, mp: 30, int: 2 },
+    description: "Кам'яний посох з рунами."
+  },
+  staff_t3: {
+    name: "Залізний посох", img: null,
+    type: "weapon", slot: "mainHand", tier: 3, levelReq: 20, price: 950, weaponType: "staff", noShop: true,
+    stats: { attack: 6, magic: 44, mp: 60, int: 3 },
+    description: "Залізний посох бойового мага."
   },
 
   // ---------- ДРУГА РУКА ----------
-  shield_wood: {
+  shield_t1: {
     name: "Дерев'яний щит", img: "shield_wood.webp",
-    type: "shield", slot: "offHand", levelReq: 1, price: 15,
-    stats: { defense: 3, blockPhys: 10 },
-    description: "Затримує легкі удари."
+    type: "shield", slot: "offHand", tier: 1, levelReq: 1, price: 12, offType: "shield",
+    stats: { defense: 3, blockPhys: 8 },
+    description: "Легкий щит із дощок."
   },
-  shield_iron: {
-    name: "Окутий щит", img: "shield_iron.webp",
-    type: "shield", slot: "offHand", levelReq: 4, price: 80, noShop: true,
-    stats: { defense: 6, blockPhys: 14 },
-    description: "Дерево, оббите залізом."
+  shield_t2: {
+    name: "Шкіряний щит", img: null,
+    type: "shield", slot: "offHand", tier: 2, levelReq: 10, price: 160, offType: "shield",
+    stats: { defense: 12, blockPhys: 12 },
+    description: "Щит, обтягнутий товстою шкірою."
+  },
+  shield_t3: {
+    name: "Залізний щит", img: "shield_iron.webp",
+    type: "shield", slot: "offHand", tier: 3, levelReq: 20, price: 800, offType: "shield", noShop: true,
+    stats: { defense: 24, blockPhys: 16 },
+    description: "Важкий залізний щит."
+  },
+  quiver_t1: {
+    name: "Полотняний колчан", img: null,
+    type: "offhand", slot: "offHand", tier: 1, levelReq: 1, price: 10, offType: "quiver",
+    stats: { attack: 2, speed: 1 },
+    description: "Колчан для стріл. Лише разом з луком."
+  },
+  quiver_t2: {
+    name: "Шкіряний колчан", img: null,
+    type: "offhand", slot: "offHand", tier: 2, levelReq: 10, price: 150, offType: "quiver",
+    stats: { attack: 7, speed: 2 },
+    description: "Шкіряний колчан — стріли під рукою. Лише з луком."
+  },
+  quiver_t3: {
+    name: "Окутий колчан", img: null,
+    type: "offhand", slot: "offHand", tier: 3, levelReq: 20, price: 750, offType: "quiver", noShop: true,
+    stats: { attack: 14, speed: 3 },
+    description: "Окутий колчан для бойових стріл. Лише з луком."
+  },
+  orb_t1: {
+    name: "Скляна сфера", img: null,
+    type: "offhand", slot: "offHand", tier: 1, levelReq: 1, price: 12, offType: "orb",
+    stats: { magic: 3, mp: 10, mpRegen: 0.5 },
+    description: "Скляна куля, що тихо світиться."
+  },
+  orb_t2: {
+    name: "Кам'яна сфера", img: null,
+    type: "offhand", slot: "offHand", tier: 2, levelReq: 10, price: 160, offType: "orb",
+    stats: { magic: 11, mp: 30, mpRegen: 1 },
+    description: "Кам'яна сфера з магічними рунами."
+  },
+  orb_t3: {
+    name: "Залізна сфера", img: null,
+    type: "offhand", slot: "offHand", tier: 3, levelReq: 20, price: 800, offType: "orb", noShop: true,
+    stats: { magic: 22, mp: 60, mpRegen: 2 },
+    description: "Сфера в залізній оправі з кристалом."
+  },
+  knife_t1: {
+    name: "Дерев'яний малий кинджал", img: null,
+    type: "offhand", slot: "offHand", tier: 1, levelReq: 1, price: 10, offType: "knife",
+    stats: { attack: 2, crit: 2 },
+    description: "Короткий клинок для лівої руки."
+  },
+  knife_t2: {
+    name: "Кам'яний малий кинджал", img: null,
+    type: "offhand", slot: "offHand", tier: 2, levelReq: 10, price: 150, offType: "knife",
+    stats: { attack: 8, crit: 3 },
+    description: "Кремінний ніж для лівої руки."
+  },
+  knife_t3: {
+    name: "Залізний малий кинджал", img: null,
+    type: "offhand", slot: "offHand", tier: 3, levelReq: 20, price: 750, offType: "knife", noShop: true,
+    stats: { attack: 16, crit: 5 },
+    description: "Залізний малий кинджал для лівої руки."
   },
 
   // ---------- БРОНЯ ----------
-  cap_leather: {
-    name: "Шкіряна шапка", img: "cap_leather.webp",
-    type: "armor", slot: "head", levelReq: 2, price: 20,
-    stats: { defense: 2 },
-    description: "Береже голову від гілок і ударів."
-  },
-  hood_wolf: {
-    name: "Каптур з вовчої шкури", img: "hood_wolf.webp",
-    type: "armor", slot: "head", levelReq: 5, price: 75, noShop: true,
-    stats: { defense: 4, magicDefense: 2, vit: 1 },
-    description: "Теплий і грізний на вигляд."
-  },
-  shirt_linen: {
-    name: "Лляна сорочка", img: "shirt_linen.webp",
-    type: "armor", slot: "chest", levelReq: 1, price: 8,
-    stats: { defense: 2, hp: 5 },
-    description: "Проста одяганка."
-  },
-  armor_leather: {
-    name: "Шкіряна куртка", img: "armor_leather.webp",
-    type: "armor", slot: "chest", levelReq: 3, price: 50, noShop: true,
-    stats: { defense: 5, hp: 15 },
-    description: "Легка та міцна."
-  },
-  armor_wolf: {
-    name: "Кожух з білого вовка", img: "armor_wolf.webp",
-    type: "armor", slot: "chest", levelReq: 6, price: 150, noShop: true,
-    stats: { defense: 9, hp: 30, magicDefense: 3, vit: 1 },
-    description: "Не пропускає ні холоду, ні ікла."
-  },
-  pants_linen: {
-    name: "Лляні штани", img: "pants_linen.webp",
-    type: "armor", slot: "legs", levelReq: 1, price: 6,
+  linen_head: {
+    name: "Лляна шапка", img: null,
+    type: "armor", slot: "head", tier: 1, levelReq: 1, price: 6, set: "linen",
     stats: { defense: 1, hp: 5 },
-    description: "Звичайні сільські штани."
+    description: "Частина лляного комплекту."
   },
-  pants_leather: {
-    name: "Шкіряні штани", img: "pants_leather.webp",
-    type: "armor", slot: "legs", levelReq: 3, price: 40, noShop: true,
-    stats: { defense: 3, hp: 10 },
-    description: "Не рвуться об колючки."
+  linen_chest: {
+    name: "Лляна сорочка", img: "shirt_linen.webp",
+    type: "armor", slot: "chest", tier: 1, levelReq: 1, price: 10, set: "linen",
+    stats: { defense: 2, hp: 10 },
+    description: "Частина лляного комплекту."
   },
-  boots_simple: {
-    name: "Прості чоботи", img: "boots_simple.webp",
-    type: "armor", slot: "feet", levelReq: 1, price: 12,
+  linen_legs: {
+    name: "Лляні штани", img: "pants_linen.webp",
+    type: "armor", slot: "legs", tier: 1, levelReq: 1, price: 8, set: "linen",
+    stats: { defense: 1, hp: 5 },
+    description: "Частина лляного комплекту."
+  },
+  linen_hands: {
+    name: "Лляні наручі", img: null,
+    type: "armor", slot: "hands", tier: 1, levelReq: 1, price: 6, set: "linen",
+    stats: { defense: 1, attack: 1 },
+    description: "Частина лляного комплекту."
+  },
+  linen_feet: {
+    name: "Лляні черевики", img: "boots_simple.webp",
+    type: "armor", slot: "feet", tier: 1, levelReq: 1, price: 8, set: "linen",
     stats: { defense: 1, speed: 1 },
-    description: "Зручні для довгих мандрів."
+    description: "Частина лляного комплекту."
   },
-  boots_leather: {
+  leather_head: {
+    name: "Шкіряна шапка", img: "cap_leather.webp",
+    type: "armor", slot: "head", tier: 2, levelReq: 10, price: 90, set: "leather", noShop: true,
+    stats: { defense: 5, hp: 20 },
+    description: "Частина шкіряного комплекту."
+  },
+  leather_chest: {
+    name: "Шкіряна куртка", img: "armor_leather.webp",
+    type: "armor", slot: "chest", tier: 2, levelReq: 10, price: 150, set: "leather", noShop: true,
+    stats: { defense: 9, hp: 35 },
+    description: "Частина шкіряного комплекту."
+  },
+  leather_legs: {
+    name: "Шкіряні штани", img: "pants_leather.webp",
+    type: "armor", slot: "legs", tier: 2, levelReq: 10, price: 110, set: "leather", noShop: true,
+    stats: { defense: 6, hp: 25 },
+    description: "Частина шкіряного комплекту."
+  },
+  leather_hands: {
+    name: "Шкіряні наручі", img: null,
+    type: "armor", slot: "hands", tier: 2, levelReq: 10, price: 90, set: "leather", noShop: true,
+    stats: { defense: 4, attack: 3 },
+    description: "Частина шкіряного комплекту."
+  },
+  leather_feet: {
     name: "Шкіряні чоботи", img: "boots_leather.webp",
-    type: "armor", slot: "feet", levelReq: 4, price: 55, noShop: true,
-    stats: { defense: 3, speed: 2, agi: 1 },
-    description: "Тихий і швидкий крок."
+    type: "armor", slot: "feet", tier: 2, levelReq: 10, price: 100, set: "leather", noShop: true,
+    stats: { defense: 4, speed: 2 },
+    description: "Частина шкіряного комплекту."
+  },
+  iron_head: {
+    name: "Залізний шолом", img: null,
+    type: "armor", slot: "head", tier: 3, levelReq: 20, price: 450, set: "iron", noShop: true,
+    stats: { defense: 10, hp: 40 },
+    description: "Частина залізного комплекту."
+  },
+  iron_chest: {
+    name: "Залізна кіраса", img: null,
+    type: "armor", slot: "chest", tier: 3, levelReq: 20, price: 750, set: "iron", noShop: true,
+    stats: { defense: 18, hp: 70 },
+    description: "Частина залізного комплекту."
+  },
+  iron_legs: {
+    name: "Залізні поножі", img: null,
+    type: "armor", slot: "legs", tier: 3, levelReq: 20, price: 550, set: "iron", noShop: true,
+    stats: { defense: 12, hp: 50 },
+    description: "Частина залізного комплекту."
+  },
+  iron_hands: {
+    name: "Залізні наручі", img: null,
+    type: "armor", slot: "hands", tier: 3, levelReq: 20, price: 450, set: "iron", noShop: true,
+    stats: { defense: 8, attack: 6 },
+    description: "Частина залізного комплекту."
+  },
+  iron_feet: {
+    name: "Залізні чоботи", img: null,
+    type: "armor", slot: "feet", tier: 3, levelReq: 20, price: 500, set: "iron", noShop: true,
+    stats: { defense: 8, speed: 3 },
+    description: "Частина залізного комплекту."
   },
 
-  // ---------- АКСЕСУАРИ ----------
-  ring_copper: {
+  // ---------- БІЖУТЕРІЯ ----------
+  ring_t1: {
     name: "Мідне кільце", img: "ring_copper.webp",
-    type: "accessory", slot: "ring", levelReq: 2, price: 40, noShop: true,
+    type: "accessory", slot: "ring", tier: 1, levelReq: 2, price: 30, noShop: true,
     stats: { crit: 2 },
-    description: "Кажуть, приносить удачу."
+    description: "Кільце з невеликим бонусом. Можна носити два кільця."
   },
-  ring_silver: {
-    name: "Срібний перстень", img: "ring_silver.webp",
-    type: "accessory", slot: "ring", levelReq: 5, price: 120, noShop: true,
-    stats: { crit: 3, spi: 1, mp: 10 },
-    description: "Холодний на дотик, ясніє думка."
+  ring_t2: {
+    name: "Срібне кільце", img: "ring_silver.webp",
+    type: "accessory", slot: "ring", tier: 2, levelReq: 10, price: 250, noShop: true,
+    stats: { crit: 3, str: 2 },
+    description: "Кільце з невеликим бонусом. Можна носити два кільця."
   },
-  amulet_fang: {
-    name: "Амулет з ікла", img: "amulet_fang.webp",
-    type: "accessory", slot: "amulet", levelReq: 4, price: 90, noShop: true,
-    stats: { attack: 2, str: 1, agi: 1 },
-    description: "Ікло ватажка вовчої зграї на шнурку."
+  ring_t3: {
+    name: "Золоте кільце", img: null,
+    type: "accessory", slot: "ring", tier: 3, levelReq: 20, price: 1200, noShop: true,
+    stats: { crit: 5, str: 4 },
+    description: "Кільце з невеликим бонусом. Можна носити два кільця."
+  },
+  amulet_t1: {
+    name: "Мідний амулет", img: null,
+    type: "accessory", slot: "amulet", tier: 1, levelReq: 2, price: 30, noShop: true,
+    stats: { hp: 15, spi: 1 },
+    description: "Амулет на шиї."
+  },
+  amulet_t2: {
+    name: "Срібний амулет", img: null,
+    type: "accessory", slot: "amulet", tier: 2, levelReq: 10, price: 250, noShop: true,
+    stats: { hp: 50, spi: 3 },
+    description: "Амулет на шиї."
+  },
+  amulet_t3: {
+    name: "Золотий амулет", img: null,
+    type: "accessory", slot: "amulet", tier: 3, levelReq: 20, price: 1200, noShop: true,
+    stats: { hp: 100, spi: 5 },
+    description: "Амулет на шиї."
+  },
+  earring_t1: {
+    name: "Мідна сережка", img: null,
+    type: "accessory", slot: "earring", tier: 1, levelReq: 2, price: 30, noShop: true,
+    stats: { mp: 10, dodge: 1 },
+    description: "Сережка з невеликим бонусом. Можна носити дві сережки."
+  },
+  earring_t2: {
+    name: "Срібна сережка", img: null,
+    type: "accessory", slot: "earring", tier: 2, levelReq: 10, price: 250, noShop: true,
+    stats: { mp: 30, dodge: 2 },
+    description: "Сережка з невеликим бонусом. Можна носити дві сережки."
+  },
+  earring_t3: {
+    name: "Золота сережка", img: null,
+    type: "accessory", slot: "earring", tier: 3, levelReq: 20, price: 1200, noShop: true,
+    stats: { mp: 60, dodge: 4 },
+    description: "Сережка з невеликим бонусом. Можна носити дві сережки."
   },
 
   // ---------- ЗІЛЛЯ ----------
@@ -275,11 +475,24 @@ function getItem(id) {
   return ITEMS[id] || null;
 }
 
-// Повний шлях до картинки предмета (з запасною картинкою)
+// Повний шлях до картинки предмета; null — картинки немає (буде заглушка)
 function itemImg(id) {
   const item = ITEMS[id];
-  return IMG_BASE + (item ? item.img : "unknown.webp");
+  return item?.img ? IMG_BASE + item.img : null;
 }
+
+// Старі ID предметів (до нового списку) → нові. Застосовується при завантаженні сейву.
+const ITEM_RENAMES = {
+  sword_wood: "sword_t1", sword_iron: "sword_t1", sword_steel: "sword_t1",
+  dagger_rusty: "dagger_t1", club_spiked: "axe_t1",
+  staff_oak: "staff_t1", staff_moon: "staff_t1",
+  shield_wood: "shield_t1", shield_iron: "shield_t1",
+  cap_leather: "linen_head", hood_wolf: "linen_head",
+  shirt_linen: "linen_chest", armor_leather: "linen_chest", armor_wolf: "linen_chest",
+  pants_linen: "linen_legs", pants_leather: "linen_legs",
+  boots_simple: "linen_feet", boots_leather: "linen_feet",
+  ring_copper: "ring_t1", ring_silver: "ring_t1", amulet_fang: "amulet_t1"
+};
 
 // Чи можна вдягнути предмет
 function isEquippable(id) {
@@ -293,7 +506,7 @@ function shopSellPrice(id) { return Math.ceil((ITEMS[id]?.price || 0) * SHOP_SEL
 function shopBuyPrice(id)  { return Math.max(1, Math.floor((ITEMS[id]?.price || 0) * SHOP_BUY_RATE)); }
 
 Object.assign(RPG, {
-  SLOTS, STAT_NAMES, ITEMS, getItem, itemImg, isEquippable,
+  SLOTS, SLOT_GROUPS, slotsFor, ITEM_RENAMES, STAT_NAMES, ITEMS, getItem, itemImg, isEquippable,
   SHOP_SELL_RATE, SHOP_BUY_RATE, shopSellPrice, shopBuyPrice
 });
 })(window.RPG);

@@ -23,9 +23,10 @@
       exp: 2,
       gold: [0, 2],
       loot: [
-        { id: "rat_tail",        chance: 0.50, qty: [1, 1] },
-        { id: "potion_hp_small", chance: 0.06, qty: [1, 1] },
-        { id: "pants_linen",     chance: 0.01, qty: [1, 1] }
+        { id: "rat_tail",         chance: 0.5, qty: [1, 1] },
+        { id: "potion_hp_small",  chance: 0.06, qty: [1, 1] },
+        { id: "linen_legs",       chance: 0.01, qty: [1, 1] },
+        { id: "sword_t1",         chance: 0.006, qty: [1, 1] }
       ]
     },
     rat2: {
@@ -36,12 +37,13 @@
       exp: 6,
       gold: [1, 4],
       loot: [
-        { id: "rat_tail",        chance: 0.55, qty: [1, 2] },
-        { id: "rat_skin",        chance: 0.25, qty: [1, 1] },
-        { id: "potion_hp_small", chance: 0.08, qty: [1, 1] },
-        { id: "potion_mp_small", chance: 0.04, qty: [1, 1] },
-        { id: "cap_leather",     chance: 0.012, qty: [1, 1] },
-        { id: "dagger_rusty",    chance: 0.010, qty: [1, 1] }
+        { id: "rat_tail",         chance: 0.55, qty: [1, 2] },
+        { id: "rat_skin",         chance: 0.25, qty: [1, 1] },
+        { id: "potion_hp_small",  chance: 0.08, qty: [1, 1] },
+        { id: "potion_mp_small",  chance: 0.04, qty: [1, 1] },
+        { id: "linen_head",       chance: 0.012, qty: [1, 1] },
+        { id: "dagger_t1",        chance: 0.01, qty: [1, 1] },
+        { id: "knife_t1",         chance: 0.006, qty: [1, 1] }
       ]
     },
     rat3: {
@@ -52,15 +54,16 @@
       exp: 20,
       gold: [3, 8],
       loot: [
-        { id: "rat_tail",         chance: 0.60, qty: [1, 2] },
+        { id: "rat_tail",         chance: 0.6, qty: [1, 2] },
         { id: "rat_skin",         chance: 0.35, qty: [1, 1] },
-        { id: "potion_hp_small",  chance: 0.10, qty: [1, 1] },
+        { id: "potion_hp_small",  chance: 0.1, qty: [1, 1] },
         { id: "potion_mp_small",  chance: 0.06, qty: [1, 1] },
         { id: "potion_hp_medium", chance: 0.02, qty: [1, 1] },
-        { id: "ring_copper",      chance: 0.012, qty: [1, 1] },
-        { id: "pants_leather",    chance: 0.012, qty: [1, 1] },
-        { id: "armor_leather",    chance: 0.008, qty: [1, 1] },
-        { id: "sword_iron",       chance: 0.008, qty: [1, 1] }
+        { id: "ring_t1",          chance: 0.01, qty: [1, 1] },
+        { id: "linen_hands",      chance: 0.012, qty: [1, 1] },
+        { id: "linen_chest",      chance: 0.01, qty: [1, 1] },
+        { id: "axe_t1",           chance: 0.008, qty: [1, 1] },
+        { id: "bow_t1",           chance: 0.008, qty: [1, 1] }
       ]
     },
 
@@ -78,10 +81,12 @@
         { id: "potion_hp_small",  chance: 0.08, qty: [1, 1] },
         { id: "potion_hp_medium", chance: 0.05, qty: [1, 1] },
         { id: "potion_mp_medium", chance: 0.025, qty: [1, 1] },
-        { id: "boots_leather",    chance: 0.012, qty: [1, 1] },
-        { id: "club_spiked",      chance: 0.010, qty: [1, 1] },
-        { id: "shield_iron",      chance: 0.008, qty: [1, 1] },
-        { id: "amulet_fang",      chance: 0.006, qty: [1, 1] },
+        { id: "linen_feet",       chance: 0.012, qty: [1, 1] },
+        { id: "axe_t1",           chance: 0.01, qty: [1, 1] },
+        { id: "shield_t1",        chance: 0.008, qty: [1, 1] },
+        { id: "quiver_t1",        chance: 0.008, qty: [1, 1] },
+        { id: "amulet_t1",        chance: 0.006, qty: [1, 1] },
+        { id: "earring_t1",       chance: 0.006, qty: [1, 1] },
         { id: "potion_magic",     chance: 0.003, qty: [1, 1] }
       ]
     },
@@ -93,15 +98,18 @@
       exp: 60,
       gold: [8, 18],
       loot: [
-        { id: "wolf_pelt",        chance: 0.50, qty: [1, 2] },
+        { id: "wolf_pelt",        chance: 0.5, qty: [1, 2] },
         { id: "wolf_fang",        chance: 0.35, qty: [1, 1] },
         { id: "potion_hp_medium", chance: 0.07, qty: [1, 1] },
         { id: "potion_mp_medium", chance: 0.045, qty: [1, 1] },
         { id: "potion_hp_large",  chance: 0.008, qty: [1, 1] },
-        { id: "hood_wolf",        chance: 0.012, qty: [1, 1] },
-        { id: "staff_moon",       chance: 0.008, qty: [1, 1] },
-        { id: "ring_silver",      chance: 0.006, qty: [1, 1] },
-        { id: "amulet_fang",      chance: 0.008, qty: [1, 1] },
+        { id: "linen_head",       chance: 0.012, qty: [1, 1] },
+        { id: "staff_t1",         chance: 0.008, qty: [1, 1] },
+        { id: "orb_t1",           chance: 0.008, qty: [1, 1] },
+        { id: "ring_t1",          chance: 0.006, qty: [1, 1] },
+        { id: "amulet_t1",        chance: 0.008, qty: [1, 1] },
+        { id: "earring_t1",       chance: 0.006, qty: [1, 1] },
+        { id: "leather_hands",    chance: 0.003, qty: [1, 1] },
         { id: "potion_magic",     chance: 0.005, qty: [1, 1] }
       ]
     },
@@ -114,13 +122,18 @@
       gold: [12, 25],
       loot: [
         { id: "white_pelt",       chance: 0.45, qty: [1, 1] },
-        { id: "wolf_fang",        chance: 0.40, qty: [1, 2] },
+        { id: "wolf_fang",        chance: 0.4, qty: [1, 2] },
         { id: "potion_hp_medium", chance: 0.08, qty: [1, 1] },
         { id: "potion_mp_medium", chance: 0.05, qty: [1, 1] },
         { id: "potion_hp_large",  chance: 0.015, qty: [1, 1] },
-        { id: "potion_mp_large",  chance: 0.010, qty: [1, 1] },
-        { id: "armor_wolf",       chance: 0.010, qty: [1, 1] },
-        { id: "sword_steel",      chance: 0.008, qty: [1, 1] },
+        { id: "potion_mp_large",  chance: 0.01, qty: [1, 1] },
+        { id: "linen_chest",      chance: 0.01, qty: [1, 1] },
+        { id: "bow_t1",           chance: 0.008, qty: [1, 1] },
+        { id: "dagger_t1",        chance: 0.008, qty: [1, 1] },
+        { id: "earring_t1",       chance: 0.008, qty: [1, 1] },
+        { id: "leather_chest",    chance: 0.004, qty: [1, 1] },
+        { id: "sword_t2",         chance: 0.002, qty: [1, 1] },
+        { id: "shield_t2",        chance: 0.002, qty: [1, 1] },
         { id: "potion_magic",     chance: 0.008, qty: [1, 1] }
       ]
     }
@@ -131,6 +144,7 @@
   //   "home"   — Домівка: битися заборонено, сундук, +5% HP/MP кожні 10 с
   //   "temple" — Храм: тут відроджуються загиблі, молитва за полеглих у групі
   //   "tavern" — Шинок: торговець (shop — що він продає)
+  //   "city"   — Місто з районами (districts); Гільдія авантюристів — у Південному
   //   "combat" — бойова локація (enemies — хто трапляється)
   // locked: true — «Закрито — відкриється згодом»
   // minLevel: N — вхід лише з N рівня героя
@@ -159,8 +173,26 @@
       merchant: "Шинкар Остап",
       shop: [
         "potion_hp_small", "potion_hp_medium", "potion_mp_small", "potion_mp_medium",
-        "sword_wood", "dagger_rusty", "staff_oak", "shield_wood",
-        "cap_leather", "shirt_linen", "pants_linen", "boots_simple"
+        "sword_t1", "dagger_t1", "staff_t1", "shield_t1",
+        "linen_head", "linen_chest", "linen_legs", "linen_hands", "linen_feet"
+      ]
+    },
+    city: {
+      name: "Місто",
+      type: "city",
+      description: "Мури, дзвони й гамір вулиць. Місто ділиться на райони — поки відкрито лише Південний, де стоїть Гільдія авантюристів.",
+      // Райони міста. locked: true — «Закрито — відкриється згодом»
+      districts: [
+        { id: "center", name: "Центральний район", building: "Мерія", locked: true,
+          description: "Площа з фонтаном і кам'яна Мерія, де вирішуються справи міста." },
+        { id: "trade", name: "Торговий район", building: "Гільдія торговців і Гільдія ремісників", locked: true,
+          description: "Крамниці, майстерні й склади. Тут торгують і кують усе, що потрібно мандрівникам." },
+        { id: "south", name: "Південний район", building: "Гільдія авантюристів", locked: false,
+          description: "Галасливий квартал найманців. У Гільдії авантюристів дають завдання, торгують зброєю й навчають бою." },
+        { id: "north", name: "Північний район", building: "Центральна брама", locked: true,
+          description: "Велика брама, крізь яку йдуть каравани та загони до далеких земель." },
+        { id: "rest", name: "Спальний район", building: "Будинки для відпочинку", locked: true,
+          description: "Тихі вулички з будинками, де можна винайняти кімнату й відпочити." }
       ]
     },
     forest_path: {
@@ -179,6 +211,15 @@
     }
   };
   const DEFAULT_LOCATION = "home";
+
+  // Торговець Гільдії авантюристів (місто): зброя 1–2 виду, малі й середні зілля
+  const GUILD_SHOP = [
+    "potion_hp_small", "potion_hp_medium", "potion_mp_small", "potion_mp_medium",
+    "sword_t1", "dagger_t1", "axe_t1", "bow_t1", "staff_t1",
+    "shield_t1", "quiver_t1", "orb_t1", "knife_t1",
+    "sword_t2", "dagger_t2", "axe_t2", "bow_t2", "staff_t2",
+    "shield_t2", "quiver_t2", "orb_t2", "knife_t2"
+  ];
   const RESPAWN_LOCATION = "temple";
 
   function getEnemy(id) {
@@ -247,7 +288,7 @@
   }
 
   Object.assign(RPG, {
-    ENEMIES, LOCATIONS, DEFAULT_LOCATION, RESPAWN_LOCATION,
+    ENEMIES, LOCATIONS, DEFAULT_LOCATION, RESPAWN_LOCATION, GUILD_SHOP,
     getEnemy, enemyImg, getLocation, isCombatLocation, canEnterLocation, pickEnemy, rollLoot
   });
 })(window.RPG);

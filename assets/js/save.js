@@ -12,7 +12,7 @@
   const STORE = "saves";
   const LS_PREFIX = "rpg_save_"; // запасне сховище в localStorage
 
-  const SAVE_VERSION = 3;        // версія ФОРМАТУ сейву (полів усередині)
+  const SAVE_VERSION = 4;        // версія ФОРМАТУ сейву (полів усередині)
   const CURRENT_SLOT_KEY = "rpg_current_slot";
 
   // ---------- Відкриття бази ----------
@@ -200,6 +200,22 @@
     save.character.deaths ??= 0;
     save.character.regenAt ??= Date.now();
 
+    // Версія 4: новий список предметів — старі ID замінюються новими (рідкість зберігається),
+    // слоти «ring» → «ring1». Плюс володіння зброєю, навички, завдання.
+    const REN = RPG.ITEM_RENAMES || {};
+    const renameRef = ref => {
+      if (typeof ref === "string") return REN[ref] || ref;
+      if (ref && REN[ref.id]) ref.id = REN[ref.id];
+      return ref;
+    };
+    if (save.equipment.ring && !save.equipment.ring1) save.equipment.ring1 = save.equipment.ring;
+    delete save.equipment.ring;
+    for (const slot in save.equipment) save.equipment[slot] = renameRef(save.equipment[slot]);
+    save.inventory = save.inventory.map(renameRef);
+    save.chest = save.chest.map(renameRef);
+    save.character.mastery ??= {};
+    save.character.skills ??= {};
+
     // Версія 3: рідкість речей. Старі речі (рядок-ID) стають білими (common)
     for (const slot in save.equipment) save.equipment[slot] = RPG.normalizeRef(save.equipment[slot]);
     save.inventory = save.inventory.map(RPG.normalizeRef).filter(Boolean);
@@ -208,7 +224,7 @@
 
     // Прибираємо предмети, яких більше немає в довіднику
     for (const slot in save.equipment) {
-      if (!ITEMS[save.equipment[slot]?.id]) delete save.equipment[slot];
+      if (!ITEMS[save.equipment[slot]?.id] || !RPG.SLOTS[slot]) delete save.equipment[slot];
     }
     save.inventory = compactStacks(save.inventory.filter(entry => ITEMS[entry.id] && entry.qty > 0));
     save.chest = compactStacks(save.chest.filter(entry => ITEMS[entry.id] && entry.qty > 0));

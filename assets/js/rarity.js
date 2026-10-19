@@ -50,14 +50,15 @@
   };
 
   // Які предмети мають рідкість
-  const RARITY_TYPES = ["weapon", "shield", "armor", "accessory"];
+  const RARITY_TYPES = ["weapon", "shield", "offhand", "armor", "accessory"];
 
   // «Параметри атаки/захисту» — те, що лишається навіть у зламаної речі
   const CORE_KEYS = {
     weapon: ["attack", "magic"],
     shield: ["defense", "blockPhys"],
     armor:  ["defense"],
-    accessory: "all"   // каблучки/амулети: усі їхні власні бонуси — основа речі
+    offhand: "all",    // колчан / сфера / малий кинджал: усі власні бонуси — основа
+    accessory: "all"   // каблучки/амулети/сережки: усі їхні власні бонуси — основа речі
   };
   // Відсоткові та дробові характеристики округлюємо до десятих
   const DECIMAL_KEYS = ["crit", "dodge", "blockPhys", "blockMag", "hpRegen", "mpRegen"];
@@ -244,6 +245,7 @@
     const id = refId(ref);
     const r = rarityOf(ref);
     const src = RPG.itemImg(id);
+    if (!src) return null;                 // картинки немає — заглушка
     if (!hasRarity(id) || r === "common") return src;
     return src.replace(/\.(png|webp)$/i, `_${r}.$1`);
   }
